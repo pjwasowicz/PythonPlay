@@ -1,0 +1,9 @@
+m3u8
+pymediainfo
+tkinterdnd2
+pygame
+pyloudnorm
+soundfile
+pillow
+customtkinter
+mutagen
