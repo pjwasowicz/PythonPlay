@@ -29,6 +29,10 @@ is_paused  = False
 dt = 100
 slider = None
 progressbar = None
+status_bar = None
+settings = None
+
+
 
 
 def bDown_Shift(event):
@@ -38,6 +42,9 @@ def bDown_Shift(event):
     select.sort()
     for i in range(select[0],select[-1]+1,1):
         tv.selection_add(tv.get_children()[i])
+
+def on_double_click(event):
+    tree.selection_set([])
 
 def bDown(event):
     global last_y
@@ -198,8 +205,11 @@ def on_delete():
         lists.save_to_m3u8(files,config.get_default_playlist_full_file_name())
 
 def set_volume(val):
+    global settings
     volume = float(val) / 100
     player.set_volume(volume)
+    settings["volume"] = val
+    config.save_settings(settings)
 
 
 def on_start():
@@ -242,7 +252,13 @@ def drop(event):
                 iid = str(uuid.uuid4())
                 songs[iid] = (file,tags)
                 values = [tags.get(colum, "") for colum in columns]
+
                 index = tree.index(currnet_item)
+
+                if currnet_item=="":
+                    n = len(tree.get_children())
+                    index = n
+
                 tree.insert('', index, iid=iid, values=values)
                 currnet_item = iid
                 selections.append(iid)
@@ -250,7 +266,10 @@ def drop(event):
             else:
                 print('Wrong file: ',file)
 
-            tree.selection_set(selections)
+            if len(tree.get_children()) != len(selections):
+                tree.selection_set(selections)
+
+
     files = utils.get_files_from_tree(tree,songs)
     lists.save_to_m3u8(files,config.get_default_playlist_full_file_name())
     clear_playing()
@@ -273,6 +292,7 @@ customtkinter.set_default_color_theme("blue")  # Themes: blue (default), dark-bl
 def build_gui():
     global slider
     global progressbar
+    global status_bar
     #root = tk.Tk()
     #root = customtkinter.CTk()
     root = CTk()
@@ -292,6 +312,8 @@ def build_gui():
     progressbar = customtkinter.CTkProgressBar(master=root)
     progressbar.pack(side="top", fill="x", padx=10, pady=5)
 
+    status_bar = customtkinter.CTkLabel(root, text="", anchor="w", height=30)
+    status_bar.pack(side="bottom", fill="x")
 
     # Ikony do przycisków
     play_icon = utils.load_and_resize_image(file="play.png")
@@ -361,7 +383,7 @@ def build_gui():
 
 
     # Konfiguracja tagów
-    tree.tag_configure("play", background="#ccffcc", foreground="blue")
+    tree.tag_configure("play", background="yellow", foreground="blue")
 
     tree.tag_configure("cortina", foreground="red")
     tree.tag_configure("vals",foreground="green")
@@ -377,6 +399,7 @@ def build_gui():
     tree.bind("<Shift-ButtonRelease-1>", bUp_Shift, add='+')
     tree.bind("<Motion>", on_mouse_enter)
     tree.bind("<Leave>", on_mouse_leave)
+    tree.bind("<Double-1>", on_double_click)
 
     tree.drop_target_register(DND_FILES)
     tree.dnd_bind('<<Drop>>', drop)
@@ -411,8 +434,19 @@ def check_music():
     global waiting_time
 
     if player.get_busy():
-        progressbar.set(player.get_progress())
 
+        progressbar.set(player.get_progress())
+        title = songs[current_song][1]["title"]
+        pos = player.get_pos()
+        status_bar.configure(
+            text="   {title}  [{minutes}:{seconds:02}]".format(
+                title=title,
+                minutes=pos // 60000,  # Liczba minut
+                seconds=(pos // 1000) % 60  # Liczba sekund
+            )
+        )
+    else:
+        status_bar.configure(text="")
     #print(player.get_busy(),is_paused)
     if not (player.get_busy() or is_paused):
         if is_playing:
@@ -438,6 +472,7 @@ def check_music():
 
     root.after(dt, check_music)
 
+
 player.init_player()
 
 root,tree = build_gui()
@@ -445,10 +480,17 @@ root.after(100, check_music)
 
 songs = load_default_playlist(tree)
 clear_playing()
+progressbar.set(0)
+
+val= settings["volume"]
+slider.set(val)
+volume = float(val) / 100
+player.set_volume(volume)
+
+config.save_settings(settings)
 
 if DEBUG:
     from utils import get_libraries
     get_libraries()
-
 root.mainloop()
 

@@ -46,9 +46,10 @@ def initilize():
     if not os.path.exists(config_file):
         settings = dict(
             main_grid = dict(
-                headers = ["Nazwa","Album","Artysta","Rodzaj"],
-                fields =  ["title","album","album_performer","genre"]
-            )
+                headers = ["Name","Artits","Performer","Album"],
+                fields =  ["title","album_performer","performer","album"]
+            ),
+            volume = 80
         )
         save_settings(settings)
 

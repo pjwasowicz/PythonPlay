@@ -27,8 +27,6 @@ def save_to_m3u8_x(files, output_path):
 
 
 def get_all_tags(file_path):
-    """Zwraca wszystkie dostępne tagi dla pliku audio."""
-    print(file_path)
     try:
         media_info = MediaInfo.parse(file_path)
         tags = {}
@@ -36,8 +34,8 @@ def get_all_tags(file_path):
             # Zbieramy wszystkie dostępne tagi dla każdej ścieżki
             for key, value in track.to_data().items():
                 tags[key] = value
-                #if DEBUG:
-                #    print(key,value)
+        if 'title' not in tags.keys():
+            tags['title'] = tags['file_name']
         return tags
     except Exception as e:
         print(f"Nie można odczytać tagów z pliku {file_path}: {e}")

@@ -38,7 +38,7 @@ def init_player():
 def reset_progress():
     global current_duration
     global start_pos
-    current_duration = 0;
+    current_duration = 0
     start_pos = 0
 
 def get_progress():
