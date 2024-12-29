@@ -38,6 +38,8 @@ delete_button = None
 pause_button = None
 next_button = None
 
+audio_device_dropdown = None
+
 def distable_button(the_button):
     if the_button.cget("state") != "disabled":
         the_button.configure(state="disabled")
@@ -86,7 +88,9 @@ def setup_buttons():
             enable_button(delete_button)
             distable_button(pause_button)
             distable_button(next_button)
-
+            enable_button(audio_device_dropdown)
+        if is_playing:
+            distable_button(audio_device_dropdown)
 
 def bDown_Shift(event):
     tv = event.widget
@@ -334,6 +338,23 @@ def drop(event):
 
 settings = config.load_settings()
 
+def set_audio_device(event):
+    global audio_device_dropdown
+    global is_playing
+
+    player.stop()
+    clear_playing()
+    player.reset_progress()
+    selected_device = audio_device_dropdown.get()
+    player.set_device(selected_device)
+    val = settings["volume"]
+    if current_song is not None:
+        tree.selection_set(current_song)
+    slider.set(val)
+    is_playing = False
+    volume = float(val) / 100
+    player.set_volume(volume)
+
 
 
 class CTk(customtkinter.CTk, TkinterDnD.DnDWrapper):
@@ -357,6 +378,7 @@ def build_gui():
     global delete_button
     global pause_button
     global next_button
+    global audio_device_dropdown
 
     #root = tk.Tk()
     #root = customtkinter.CTk()
@@ -388,8 +410,20 @@ def build_gui():
     progressbar = customtkinter.CTkProgressBar(master=root)
     progressbar.pack(side="top", fill="x", padx=10, pady=5)
 
-    status_bar = customtkinter.CTkLabel(root, text="", anchor="w", height=30)
-    status_bar.pack(side="bottom", fill="x")
+    #status_bar = customtkinter.CTkLabel(root, text="", anchor="w", height=30)
+    #status_bar.pack(side="bottom", fill="x")
+
+    panel = customtkinter.CTkFrame(root)
+    panel.pack(side="bottom", fill="x", padx=10, pady=10)
+
+    status_bar = customtkinter.CTkLabel(panel, text="", anchor="w", height=30)
+    status_bar.pack(side="left", fill="x", padx=0)
+
+    # Lista urządzeń audio
+    device_list = player.get_devices()
+    # Dropdown z urządzeniami audio
+    audio_device_dropdown = customtkinter.CTkOptionMenu(panel, values=device_list,command=set_audio_device)
+    audio_device_dropdown.pack(side="right", padx=0)
 
     # Ikony do przycisków
     play_icon = utils.load_and_resize_image(file="play.png")

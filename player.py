@@ -8,6 +8,15 @@ from mutagen.mp3 import MP3
 current_duration = 0
 start_pos = 0
 
+import pygame._sdl2.audio as sdl2_audio
+
+def set_device(selected_device):
+    pygame.mixer.quit()  # Zatrzymanie aktualnego urządzenia
+    pygame.mixer.init(devicename=selected_device)
+
+def get_devices(capture_devices: bool = False):
+    devices = tuple(sdl2_audio.get_audio_device_names(capture_devices))
+    return devices
 
 
 def get_loudness(file_path):
