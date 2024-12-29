@@ -32,7 +32,60 @@ progressbar = None
 status_bar = None
 settings = None
 
+start_button = None
+stop_button = None
+delete_button = None
+pause_button = None
+next_button = None
 
+def distable_button(the_button):
+    if the_button.cget("state") != "disabled":
+        the_button.configure(state="disabled")
+
+def enable_button(the_button):
+    if the_button.cget("state") != "normal":
+        the_button.configure(state="normal")
+
+
+def setup_buttons():
+    global start_button
+    global stop_button
+    global delete_button
+    global pause_button
+    global next_button
+    #normal
+    #if start_button.cget("state") != "disabled":
+    #   start_button.configure(state="disabled")
+
+    row_count = len(tree.get_children())
+
+    if row_count == 0:
+        distable_button(start_button)
+        distable_button(stop_button)
+        distable_button(delete_button)
+        distable_button(pause_button)
+        distable_button(next_button)
+    else:
+        if is_paused:
+            distable_button(start_button)
+            distable_button(stop_button)
+            distable_button(delete_button)
+            enable_button(pause_button)
+            distable_button(next_button)
+
+        if is_playing and not is_paused:
+            distable_button(start_button)
+            enable_button(stop_button)
+            distable_button(delete_button)
+            enable_button(pause_button)
+            enable_button(next_button)
+
+        if not is_playing:
+            enable_button(start_button)
+            distable_button(stop_button)
+            enable_button(delete_button)
+            distable_button(pause_button)
+            distable_button(next_button)
 
 
 def bDown_Shift(event):
@@ -193,10 +246,10 @@ def on_delete():
     selected_items = tree.selection()
 
     if not selected_items:
-        messagebox.showwarning("Brak zaznaczenia", "Nie zaznaczono żadnych elementów do usunięcia.")
+        messagebox.showwarning("None selected", "Select rows.")
         return
-    confirm = messagebox.askyesno("Potwierdzenie usunięcia",
-                                  f"Czy na pewno chcesz usunąć {len(selected_items)} element(y)?")
+    confirm = messagebox.askyesno("Confirmation",
+                                  f"Delete {len(selected_items)} song(s)?")
 
     if confirm:
         for item in selected_items:
@@ -230,11 +283,13 @@ def on_start():
 def on_stop():
     global is_playing
     global current_song
-    player.fade()
-    clear_playing()
-    player.reset_progress()
-    tree.selection_set(current_song)
-    is_playing = False
+    confirm = messagebox.askyesno("Confirmation","Stop playing?")
+    if confirm:
+        player.fade()
+        clear_playing()
+        player.reset_progress()
+        tree.selection_set(current_song)
+        is_playing = False
 
 def drop(event):
     global current_song
@@ -289,17 +344,38 @@ class CTk(customtkinter.CTk, TkinterDnD.DnDWrapper):
 customtkinter.set_appearance_mode("system")  # Modes: system (default), light, dark
 customtkinter.set_default_color_theme("blue")  # Themes: blue (default), dark-blue, green
 
+from tkinter import Menu
+
+
 def build_gui():
     global slider
     global progressbar
     global status_bar
+
+    global start_button
+    global stop_button
+    global delete_button
+    global pause_button
+    global next_button
+
     #root = tk.Tk()
     #root = customtkinter.CTk()
     root = CTk()
-    #ot.withdraw()
+    icon = PhotoImage(file="icon.png")
+    root.iconphoto(True, icon)
+    root.title('Milonga')
+    # Ustawienie menu w aplikacji
 
-    root.title("Milonga")
+    menu_bar = tk.Menu(root)
 
+    app_menu = tk.Menu(menu_bar, name="apple")
+    app_menu.add_command(label="O aplikacji", command=lambda: print("Moja aplikacja v1.0"))
+    app_menu.add_separator()
+    #app_menu.add_command(label="Zamknij", command=app.quit)
+    menu_bar.add_cascade(menu=app_menu)
+    #menu_bar.delete(0,'end')
+    root.config(menu=menu_bar)
+    #menu_bar.delete(-1)
     # Pasek narzędzi
     #toolbar = tk.Frame(root, bg="#f0f0f0", bd=1, relief="raised")
     toolbar = customtkinter.CTkFrame(root)
@@ -325,6 +401,7 @@ def build_gui():
 
     # Przycisk Start
     start_button = customtkinter.CTkButton(toolbar, image=play_icon, command=on_start, text = "Start")
+    #start_button = ttk.Button(toolbar, image=play_icon, command=on_start, text="Start")
     start_button.image = play_icon  # Zachowanie referencji do obrazu
     start_button.pack(side="left", padx=2, pady=2)
 
@@ -433,8 +510,10 @@ def check_music():
     global current_song
     global waiting_time
 
-    if player.get_busy():
 
+    setup_buttons()
+
+    if player.get_busy():
         progressbar.set(player.get_progress())
         title = songs[current_song][1]["title"]
         pos = player.get_pos()
@@ -476,6 +555,7 @@ def check_music():
 player.init_player()
 
 root,tree = build_gui()
+
 root.after(100, check_music)
 
 songs = load_default_playlist(tree)
