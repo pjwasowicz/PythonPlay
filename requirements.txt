@@ -7,3 +7,4 @@ soundfile
 pillow
 customtkinter
 mutagen
+pydub

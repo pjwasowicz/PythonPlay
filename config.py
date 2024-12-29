@@ -1,12 +1,15 @@
 import plistlib
 import os
 
+from player import converted_files
+
 DEBUG = False
 
 pause_time = 2000
 fade_time = 3000
 
 default_m3u8_file_path = "default.m3u8"
+converted_files_file_name = "converted_files.json"
 
 app_name = 'Milonga'
 library_name = "Library"
@@ -15,6 +18,9 @@ settings_file = "milonga.plist"
 
 def get_config_full_file_name():
     return os.path.join(get_application_support_directory(), settings_file)
+
+def get_converted_files_full_file_name():
+    return os.path.join(get_application_support_directory(), converted_files_file_name)
 
 def get_default_playlist_full_file_name():
     return os.path.join(get_application_support_directory(), default_m3u8_file_path)

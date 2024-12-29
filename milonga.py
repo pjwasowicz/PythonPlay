@@ -1,3 +1,9 @@
+import os
+
+current_directory = os.getcwd()
+p=current_directory + '/ffmpeg/'
+os.environ["PATH"] += os.pathsep + p
+
 import config
 import lists
 import utils
@@ -5,6 +11,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import PhotoImage
 from tkinterdnd2 import *
+from tkinter import filedialog
 
 
 import re
@@ -17,7 +24,7 @@ from config import DEBUG
 
 import customtkinter
 
-customtkinter.set_appearance_mode("light")  # Modes: system (default), light, dark
+customtkinter.set_appearance_mode("light")
 customtkinter.set_default_color_theme("blue")
 
 last_highlighted = None
@@ -39,6 +46,26 @@ pause_button = None
 next_button = None
 
 audio_device_dropdown = None
+
+def about():
+    messagebox.showinfo("Milonga", "Milonga DJ Soft - Paweł Wąsowicz")
+
+
+def export_playlist():
+    file_path = filedialog.asksaveasfilename(title="Export to m3u8 file",
+                                           filetypes=[("Playlist file:", "*.m3u8")])
+
+    # Jeśli użytkownik wybrał plik
+    if file_path:
+        files = utils.get_files_from_tree(tree, songs)
+        lists.save_to_m3u8(files,file_path,save_external=True)
+
+def on_closing():
+    global is_playing
+    if is_playing:
+        messagebox.showwarning("Warning", "Cannot close application while is playing. ")
+    else:
+        root.destroy()
 
 def distable_button(the_button):
     if the_button.cget("state") != "disabled":
@@ -120,7 +147,7 @@ def bUp(event):
 
         files = utils.get_files_from_tree(tree,songs)
         lists.save_to_m3u8(files,config.get_default_playlist_full_file_name())
-
+        player.save_converted_files()
         print('Saved')
         is_dragging = False
     #tree.selection_set(())
@@ -256,10 +283,19 @@ def on_delete():
                                   f"Delete {len(selected_items)} song(s)?")
 
     if confirm:
+        converted_files =player.get_converted_files()
         for item in selected_items:
             tree.delete(item)
+            file_name = songs[item][0]
+            if file_name in converted_files.keys():
+                #do usunięcia
+                print("Remove:",file_name)
+                os.remove(file_name)
+                player.remove_converted_file_from_list(file_name)
+
         files = utils.get_files_from_tree(tree,songs)
         lists.save_to_m3u8(files,config.get_default_playlist_full_file_name())
+        player.save_converted_files()
 
 def set_volume(val):
     global settings
@@ -305,32 +341,46 @@ def drop(event):
         currnet_item = tree.identify_row(y)
         columns = settings['main_grid']['fields']
         selections = []
+
+        start_pos = progressbar.get()
+
+        fn = len(files)
+        i = 0
         for file in reversed(files):
+            i=i+1
+            po = (i)/fn
+            progressbar.set(po)
+            root.update_idletasks()  # Odświeżamy GUI
+            root.after(100)  # Wstrzymujemy na 100 ms
+            root.update()
             tags = lists.get_all_tags(file)
-            if tags['title'] is not None:
-                iid = str(uuid.uuid4())
-                songs[iid] = (file,tags)
-                values = [tags.get(colum, "") for colum in columns]
+            if (tags['title'] is not None):
+                new_file = player.can_load_sound(file)
+                if new_file is not None:
+                    iid = str(uuid.uuid4())
+                    songs[iid] = (new_file,tags)
+                    values = [tags.get(colum, "") for colum in columns]
 
-                index = tree.index(currnet_item)
+                    index = tree.index(currnet_item)
 
-                if currnet_item=="":
-                    n = len(tree.get_children())
-                    index = n
+                    if currnet_item=="":
+                        n = len(tree.get_children())
+                        index = n
 
-                tree.insert('', index, iid=iid, values=values)
-                currnet_item = iid
-                selections.append(iid)
-                print('File added: ',file)
-            else:
-                print('Wrong file: ',file)
+                    tree.insert('', index, iid=iid, values=values)
+                    currnet_item = iid
+                    selections.append(iid)
+                    print('File added: ',new_file)
+                else:
+                    print('Wrong file: ',new_file)
 
-            if len(tree.get_children()) != len(selections):
-                tree.selection_set(selections)
-
+                if len(tree.get_children()) != len(selections):
+                    tree.selection_set(selections)
+        progressbar.set(start_pos)
 
     files = utils.get_files_from_tree(tree,songs)
     lists.save_to_m3u8(files,config.get_default_playlist_full_file_name())
+    player.save_converted_files()
     clear_playing()
     if current_song is not None:
         select_playing(current_song)
@@ -383,6 +433,7 @@ def build_gui():
     #root = tk.Tk()
     #root = customtkinter.CTk()
     root = CTk()
+    root.protocol("WM_DELETE_WINDOW", on_closing)
     icon = PhotoImage(file="icon.png")
     root.iconphoto(True, icon)
     root.title('Milonga')
@@ -391,7 +442,8 @@ def build_gui():
     menu_bar = tk.Menu(root)
 
     app_menu = tk.Menu(menu_bar, name="apple")
-    app_menu.add_command(label="O aplikacji", command=lambda: print("Moja aplikacja v1.0"))
+    app_menu.add_command(label="About...", command=about)
+    app_menu.add_command(label="Export playlist", command=export_playlist)
     app_menu.add_separator()
     #app_menu.add_command(label="Zamknij", command=app.quit)
     menu_bar.add_cascade(menu=app_menu)
@@ -587,12 +639,11 @@ def check_music():
 
 
 player.init_player()
-
 root,tree = build_gui()
-
 root.after(100, check_music)
 
 songs = load_default_playlist(tree)
+player.load_converted_files()
 clear_playing()
 progressbar.set(0)
 

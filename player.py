@@ -4,11 +4,58 @@ import soundfile as sf
 
 import config
 from mutagen.mp3 import MP3
+import os
+
+import utils
+import uuid
+import json
 
 current_duration = 0
 start_pos = 0
 
+allowed_files = [".mp3",".ogg"]
+
+converted_files = {}
+
 import pygame._sdl2.audio as sdl2_audio
+
+
+def remove_converted_file_from_list(name):
+    global converted_files
+    del converted_files[name]
+
+def load_converted_files():
+    global converted_files
+    file_name = config.get_converted_files_full_file_name()
+    if os.path.exists(file_name):
+        with open(file_name, 'r') as file:
+            converted_files = json.load(file)
+
+
+def get_converted_files():
+    return converted_files
+
+def save_converted_files():
+    file_name = config.get_converted_files_full_file_name()
+    with open(file_name, 'w') as file:
+        json.dump(converted_files, file,indent=4)
+
+def can_load_sound(file_path):
+    try:
+        _, extension = os.path.splitext(file_path)
+        extension = extension.lower()
+        if extension in allowed_files:
+            return file_path
+        else:
+            new_sound_file = str(uuid.uuid4())+".mp3"
+            new_file = os.path.join(config.get_application_support_directory(), new_sound_file)
+            utils.convert_to_mp3_with_tags(file_path,new_file)
+            converted_files[new_file] = file_path
+            return new_file
+    except Exception as e:
+        # W przypadku błędu zwróci False
+        print("Cannot load: ",file_path,e)
+        return None
 
 def set_device(selected_device):
     pygame.mixer.quit()  # Zatrzymanie aktualnego urządzenia
@@ -94,7 +141,10 @@ def play_from_file(file, pos=0):
 def play_from_list(song_id,songs, pos =0):
     if song_id is not None:
         file = songs[song_id][0]
-        play_from_file(file, pos=pos)
+        try:
+            play_from_file(file, pos=pos)
+        except Exception as e:
+            print(str(e))
         print("Playing: ",song_id,file)
 
 def get_busy():

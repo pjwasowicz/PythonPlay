@@ -1,20 +1,26 @@
 import m3u8
 from pymediainfo import MediaInfo
 import os
+
+import player
 from config import DEBUG
+from player import converted_files
 
-def save_to_m3u8(files, output_path):
+
+def save_to_m3u8(files, output_path, save_external=False):
     with open(output_path, 'w') as f:
-        # Zapisz nagłówek M3U8
         f.write("#EXTM3U\n")
-
+        converted_files=player.get_converted_files()
         # Iteruj przez listę plików
         for file, _ in files:
+            file_name = file
 
-            # Możesz dodać dodatkowe informacje przed plikiem, jak np. czas trwania
-            # Zapisz każdy plik w formacie M3U8
-            f.write(f"#EXTINF:-1,{file}\n")
-            f.write(f"{file}\n")
+            if save_external:
+                if file in converted_files.keys():
+                    file_name = converted_files[file]
+
+            f.write(f"#EXTINF:-1,{file_name}\n")
+            f.write(f"{file_name}\n")
 
 def save_to_m3u8_x(files, output_path):
     playlist = m3u8.M3U8()

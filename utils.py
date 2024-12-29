@@ -1,5 +1,16 @@
 from tkinter import *
 from PIL import Image, ImageTk
+import subprocess
+
+def convert_to_mp3_with_tags(input_file, output_file):
+
+    ffmpeg_command = [
+        'ffmpeg',
+        '-i', input_file,
+        output_file
+    ]
+
+    subprocess.run(ffmpeg_command, check=True)
 
 
 def get_files_from_tree(tree,songs):
