@@ -95,27 +95,29 @@ def setup_buttons():
         distable_button(pause_button)
         distable_button(next_button)
     else:
+        enable_button(delete_button)
         if is_paused:
             distable_button(start_button)
             distable_button(stop_button)
-            distable_button(delete_button)
+            #distable_button(delete_button)
             enable_button(pause_button)
             distable_button(next_button)
 
         if is_playing and not is_paused:
             distable_button(start_button)
             enable_button(stop_button)
-            distable_button(delete_button)
+            #distable_button(delete_button)
             enable_button(pause_button)
             enable_button(next_button)
 
         if not is_playing:
             enable_button(start_button)
             distable_button(stop_button)
-            enable_button(delete_button)
+            #enable_button(delete_button)
             distable_button(pause_button)
             distable_button(next_button)
             enable_button(audio_device_dropdown)
+
         if is_playing:
             distable_button(audio_device_dropdown)
 
