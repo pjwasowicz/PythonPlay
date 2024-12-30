@@ -12,7 +12,7 @@ from tkinter import ttk
 from tkinter import PhotoImage
 from tkinterdnd2 import *
 from tkinter import filedialog
-
+import threading
 
 import re
 import uuid
@@ -334,10 +334,13 @@ def on_stop():
         is_playing = False
         player.delete_tmp_files()
 
-def drop(event):
+
+
+
+def make_drop(event):
     global current_song
     if event.data:
-        p= r"\{(.*?)\}"
+        p = r"\{(.*?)\}"
         files = re.findall(p, event.data)
         y = event.y_root - event.widget.winfo_rooty()
         tree = event.widget
@@ -350,8 +353,8 @@ def drop(event):
         fn = len(files)
         i = 0
         for file in reversed(files):
-            i=i+1
-            po = (i)/fn
+            i = i + 1
+            po = (i) / fn
             progressbar.set(po)
             root.update_idletasks()  # Odświeżamy GUI
             root.after(100)  # Wstrzymujemy na 100 ms
@@ -361,33 +364,42 @@ def drop(event):
                 new_file = player.can_load_sound(file)
                 if new_file is not None:
                     iid = str(uuid.uuid4())
-                    songs[iid] = (new_file,tags)
+                    songs[iid] = (new_file, tags)
                     values = [tags.get(colum, "") for colum in columns]
 
                     index = tree.index(currnet_item)
 
-                    if currnet_item=="":
+                    if currnet_item == "":
                         n = len(tree.get_children())
                         index = n
 
                     tree.insert('', index, iid=iid, values=values)
                     currnet_item = iid
                     selections.append(iid)
-                    print('File added: ',new_file)
+                    print('File added: ', new_file)
                 else:
-                    print('Wrong file: ',new_file)
+                    print('Wrong file: ', new_file)
 
                 if len(tree.get_children()) != len(selections):
                     tree.selection_set(selections)
         progressbar.set(start_pos)
 
-    files = utils.get_files_from_tree(tree,songs)
-    lists.save_to_m3u8(files,config.get_default_playlist_full_file_name())
+    files = utils.get_files_from_tree(tree, songs)
+    lists.save_to_m3u8(files, config.get_default_playlist_full_file_name())
     player.save_converted_files()
     clear_playing()
     if current_song is not None:
         select_playing(current_song)
     return event.action
+
+
+
+def drop(event):
+    def worker():
+        make_drop(event)
+    thread = threading.Thread(target=worker)
+    thread.start()
+
 
 settings = config.load_settings()
 
