@@ -284,7 +284,7 @@ def play_from_list(song_id,songs, pos =0):
         print("High frequency: ",high_frequency)
 
         try:
-            play_from_file(file,pos=0,
+            play_from_file(file,pos=pos,
                    normalize_volume=True,
                    low_frequency = 10,
                    high_frequency = high_frequency)
