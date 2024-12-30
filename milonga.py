@@ -332,6 +332,7 @@ def on_stop():
         player.reset_progress()
         tree.selection_set(current_song)
         is_playing = False
+        player.delete_tmp_files()
 
 def drop(event):
     global current_song

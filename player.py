@@ -9,6 +9,15 @@ import os
 import utils
 import uuid
 import json
+import numpy as np
+from scipy.signal import butter, lfilter
+import tempfile
+import wave
+import time
+
+import io
+
+tmp_files =[]
 
 current_duration = 0
 start_pos = 0
@@ -19,6 +28,13 @@ converted_files = {}
 
 import pygame._sdl2.audio as sdl2_audio
 
+
+def delete_tmp_files():
+    global tmp_files
+    for file in tmp_files:
+        os.remove(file)
+        print("Deleted file:",file)
+    tmp_files =[]
 
 def remove_converted_file_from_list(name):
     global converted_files
@@ -116,10 +132,70 @@ def fade():
 def stop():
     pygame.mixer.music.stop()
 
+
+def decode_mp3_to_pcm(input_mp3_path):
+    from pydub import AudioSegment
+    audio = AudioSegment.from_file(input_mp3_path)
+    audio = audio.set_frame_rate(44100).set_channels(2)  # Ustawienie mono i 44.1 kHz
+    return audio
+
+
+def low_pass_filter(data, sample_rate, cutoff_freq):
+    nyquist = 0.5 * sample_rate
+    normal_cutoff = cutoff_freq / nyquist
+    b, a = butter(5, normal_cutoff, btype='low', analog=False)
+    filtered_data = lfilter(b, a, data)
+    return filtered_data
+
+
 def play_from_file(file, pos=0):
+    global tmp_files
+    start_time = time.time()
+    audio_segment = decode_mp3_to_pcm(file)
+
+    sample_rate = audio_segment.frame_rate
+    pcm_data = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
+
+    left_channel = pcm_data[0::2]
+    right_channel = pcm_data[1::2]
+
+    # Zastosuj filtr niskoprzepustowy do obu kanałów
+    cutoff_frequency = 4000  # np. 1000 Hz
+    filtered_left = low_pass_filter(left_channel, sample_rate, cutoff_frequency)
+    filtered_right = low_pass_filter(right_channel, sample_rate, cutoff_frequency)
+
+    # Połącz przetworzone dane stereo
+    filtered_audio = np.empty((filtered_left.size + filtered_right.size,), dtype=np.int16)
+    filtered_audio[0::2] = filtered_left
+    filtered_audio[1::2] = filtered_right
+
+    # Zastosuj filtr niskoprzepustowy
+    #cutoff_frequency = 20000  # np. 1000 Hz
+    #filtered_audio = low_pass_filter(pcm_data, sample_rate, cutoff_frequency)
+    #filtered_audio = filtered_audio.astype(np.int16)  # Konwersja do int16
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+        temp_file_path = temp_file.name
+        with wave.open(temp_file, 'wb') as output_wav:
+            output_wav.setnchannels(2)  # Stereo
+            output_wav.setsampwidth(2)  # 16-bitowe dane
+            output_wav.setframerate(sample_rate)
+            output_wav.writeframes(filtered_audio.tobytes())
+
+
+
+
     global current_duration
     global start_pos
-    pygame.mixer.music.load(file)
+
+
+    pygame.mixer.music.load(temp_file_path)
+    end_time = time.time()  # Zapisz czas zakończenia
+
+    # Oblicz i wyświetl czas wykonania
+    print(f"Encoding time: {end_time - start_time:.4f} s")
+    delete_tmp_files()
+    tmp_files.append(temp_file_path)
     audio = MP3(file)
     duration = audio.info.length
     current_duration = duration
@@ -131,9 +207,28 @@ def play_from_file(file, pos=0):
     if pos >0:
         fade_time = config.fade_time
     pygame.mixer.music.play(fade_ms=fade_time, start=pos)
+    #sound.play(fade_ms=fade_time)
 
     return duration
     #time.sleep(3)
+
+def play_from_file_old(file, pos=0):
+    global current_duration
+    global start_pos
+    pygame.mixer.music.load(file)
+    audio = MP3(file)
+    duration = audio.info.length
+    current_duration = duration
+    start_pos = start_pos + pos
+    pos = pos / 1000
+
+    fade_time = 0
+    if pos > 0:
+        fade_time = config.fade_time
+    pygame.mixer.music.play(fade_ms=fade_time, start=pos)
+
+    return duration
+    # time.sleep(3)
 
      #Zatrzymaj odtwarzanie po 10 sekundach
     #pygame.mixer.music.stop()
