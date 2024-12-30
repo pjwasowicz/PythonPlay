@@ -79,6 +79,7 @@ def can_load_sound(file_path):
 def set_device(selected_device):
     pygame.mixer.quit()  # Zatrzymanie aktualnego urządzenia
     pygame.mixer.init(devicename=selected_device)
+    print("Device set:",selected_device)
 
 def get_devices(capture_devices: bool = False):
     devices = tuple(sdl2_audio.get_audio_device_names(capture_devices))

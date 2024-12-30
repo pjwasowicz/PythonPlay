@@ -669,6 +669,9 @@ player.set_volume(volume)
 
 config.save_settings(settings)
 
+selected_device = audio_device_dropdown.get()
+player.set_device(selected_device)
+
 if DEBUG:
     from utils import get_libraries
     get_libraries()
