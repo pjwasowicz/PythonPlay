@@ -5,8 +5,10 @@ from player import converted_files
 
 DEBUG = False
 
-pause_time = 2000
+pause_time = 3000
 fade_time = 3000
+target_rms = 20
+
 
 default_m3u8_file_path = "default.m3u8"
 converted_files_file_name = "converted_files.json"
@@ -52,8 +54,8 @@ def initilize():
     if not os.path.exists(config_file):
         settings = dict(
             main_grid = dict(
-                headers = ["Name","Artits","Performer","Album"],
-                fields =  ["title","album_performer","performer","album"]
+                headers = ["Name","Artits","Performer","Album","Comment"],
+                fields =  ["title","album_performer","performer","album","comment"]
             ),
             volume = 80
         )

@@ -14,6 +14,7 @@ from scipy.signal import butter, lfilter
 import tempfile
 import wave
 import time
+import re
 
 import io
 
@@ -25,6 +26,8 @@ start_pos = 0
 allowed_files = [".mp3",".ogg"]
 
 converted_files = {}
+
+current_volume = 0.0
 
 import pygame._sdl2.audio as sdl2_audio
 
@@ -96,6 +99,8 @@ def calculate_replay_volume(file_path,target_lufs=-20):
     return linear_volume
 
 def set_volume(volume):
+    global current_volume
+    current_volume = volume
     pygame.mixer.music.set_volume(volume)
 
 def pause():
@@ -139,6 +144,20 @@ def decode_mp3_to_pcm(input_mp3_path):
     audio = audio.set_frame_rate(44100).set_channels(2)  # Ustawienie mono i 44.1 kHz
     return audio
 
+def db_to_amplitude(db):
+    return 10 ** (db / 20)
+
+def apply_band_filter(data, sample_rate,
+                      low_frequency=10,
+                      high_frequency=20000):
+    nyquist = 0.5 * sample_rate
+    low_cutoff = low_frequency / nyquist
+    high_cutoff = high_frequency / nyquist
+    b, a = butter(5, [low_cutoff, high_cutoff], btype='band', analog=False)
+    filtered_data = lfilter(b, a, data)
+    return filtered_data
+
+
 
 def low_pass_filter(data, sample_rate, cutoff_freq):
     nyquist = 0.5 * sample_rate
@@ -148,31 +167,48 @@ def low_pass_filter(data, sample_rate, cutoff_freq):
     return filtered_data
 
 
-def play_from_file(file, pos=0):
+def play_from_file(file, pos=0,
+                   normalize_volume=True,
+                   low_frequency = 10,
+                   high_frequency = 20000 ):
     global tmp_files
+    global current_volume
     start_time = time.time()
     audio_segment = decode_mp3_to_pcm(file)
 
     sample_rate = audio_segment.frame_rate
     pcm_data = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
 
+
+
     left_channel = pcm_data[0::2]
     right_channel = pcm_data[1::2]
 
-    # Zastosuj filtr niskoprzepustowy do obu kanałów
-    cutoff_frequency = 4000  # np. 1000 Hz
-    filtered_left = low_pass_filter(left_channel, sample_rate, cutoff_frequency)
-    filtered_right = low_pass_filter(right_channel, sample_rate, cutoff_frequency)
+
+
+    #filtered_left = apply_band_filter(left_channel, sample_rate, low_frequency, high_frequency)
+    #filtered_right = apply_band_filter(right_channel, sample_rate, low_frequency, high_frequency)
+
+    filtered_left = low_pass_filter(left_channel, sample_rate,high_frequency)
+    filtered_right = low_pass_filter(right_channel, sample_rate,high_frequency)
 
     # Połącz przetworzone dane stereo
     filtered_audio = np.empty((filtered_left.size + filtered_right.size,), dtype=np.int16)
     filtered_audio[0::2] = filtered_left
     filtered_audio[1::2] = filtered_right
 
-    # Zastosuj filtr niskoprzepustowy
-    #cutoff_frequency = 20000  # np. 1000 Hz
-    #filtered_audio = low_pass_filter(pcm_data, sample_rate, cutoff_frequency)
-    #filtered_audio = filtered_audio.astype(np.int16)  # Konwersja do int16
+
+    if normalize_volume:
+        rms = np.sqrt(np.mean(np.square(pcm_data)))
+
+        scaling_factor = config.target_rms / rms
+        new_volume = scaling_factor*current_volume
+        if new_volume > 1:
+            new_volume = 1
+        print("Volume:",current_volume,new_volume,scaling_factor)
+        pygame.mixer.music.set_volume(new_volume)
+
+
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
         temp_file_path = temp_file.name
@@ -181,9 +217,6 @@ def play_from_file(file, pos=0):
             output_wav.setsampwidth(2)  # 16-bitowe dane
             output_wav.setframerate(sample_rate)
             output_wav.writeframes(filtered_audio.tobytes())
-
-
-
 
     global current_duration
     global start_pos
@@ -210,7 +243,6 @@ def play_from_file(file, pos=0):
     #sound.play(fade_ms=fade_time)
 
     return duration
-    #time.sleep(3)
 
 def play_from_file_old(file, pos=0):
     global current_duration
@@ -230,14 +262,32 @@ def play_from_file_old(file, pos=0):
     return duration
     # time.sleep(3)
 
-     #Zatrzymaj odtwarzanie po 10 sekundach
-    #pygame.mixer.music.stop()
+def extract_h_value(input_string, default_value=20000):
+    # Wzorzec do wyszukiwania liczby po "H:"
+    match = re.search(r"h:(\d+)", input_string.lower())
+    if match:
+        # Jeśli znaleziono, zwróć liczbę jako int
+        return int(match.group(1))
+    else:
+        # Jeśli nie znaleziono, zwróć wartość domyślną
+        return default_value
 
 def play_from_list(song_id,songs, pos =0):
     if song_id is not None:
         file = songs[song_id][0]
+        tags = songs[song_id][1]
+        comment = ""
+        if 'comment' in tags.keys():
+            comment = tags["comment"]
+
+        high_frequency=extract_h_value(comment)
+        print("High frequency: ",high_frequency)
+
         try:
-            play_from_file(file, pos=pos)
+            play_from_file(file,pos=0,
+                   normalize_volume=True,
+                   low_frequency = 10,
+                   high_frequency = high_frequency)
         except Exception as e:
             print(str(e))
         print("Playing: ",song_id,file)
