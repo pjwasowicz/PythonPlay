@@ -4,6 +4,7 @@ current_directory = os.getcwd()
 p=current_directory + '/ffmpeg/'
 os.environ["PATH"] += os.pathsep + p
 
+import global_vars
 import config
 import lists
 import utils
@@ -46,6 +47,7 @@ pause_button = None
 next_button = None
 
 audio_device_dropdown = None
+
 
 def about():
     messagebox.showinfo("Milonga", "Milonga DJ Soft - Paweł Wąsowicz")
@@ -159,11 +161,29 @@ def bUp_Shift(event):
 
 #values= None
 
+def select_mouse_row(item):
+    global last_highlighted
+    global is_playing
+    if item != last_highlighted:
+        # Usuń podświetlenie z poprzedniego wiersza
+        if last_highlighted:
+            select_genre(last_highlighted)
+            #tree.item(last_highlighted, tags=())
+
+        # Ustaw podświetlenie na nowym wierszu
+        if item:
+            tree.item(item, tags=("over",))
+
+        # Zaktualizuj ostatnio podświetlony wiersz
+
+        last_highlighted = item
+        if is_playing:
+            tree.item(current_song, tags=("play",))
 
 def on_mouse_enter(event):
-
     global is_dragging
-    global last_highlighted
+
+    global current_song
     tree = event.widget
 
     if is_dragging:
@@ -173,31 +193,15 @@ def on_mouse_enter(event):
             tree.yview_scroll(1, "units")
 
     item = tree.identify_row(event.y)
-
-
-
-    if item != last_highlighted:
-        """
-        # Usuń podświetlenie z poprzedniego wiersza
-        if last_highlighted:
-            tree.item(last_highlighted, tags=())
-
-        # Ustaw podświetlenie na nowym wierszu
-        if item:
-            tree.item(item, tags=("green",))
-
-        # Zaktualizuj ostatnio podświetlony wiersz
-        """
-        last_highlighted = item
+    if item is not None:
+        select_mouse_row(item)
 
 
 def on_mouse_leave(event):
-    tree = event.widget
-    item = tree.identify_row(event.y)
-    if item:
-        tree.item(item, tags=())
-    else:
-        pass
+    global is_playing
+    clear_playing()
+    if is_playing :
+        tree.item(current_song, tags=("play",))
 
 
 def bMove(event):
@@ -236,8 +240,8 @@ def get_next_song(current_iid):
     next_iid = children[current_index + 1]
     return next_iid
 
-def clear_playing():
-    for iid in tree.get_children():
+def select_genre(iid):
+    if iid is not None:
         tree.item(iid, tags=())
         tags = songs[iid][1]
         if "genre" in tags:
@@ -248,6 +252,11 @@ def clear_playing():
                 tree.item(iid, tags=("vals",))
             if "cortina" in genre.lower():
                 tree.item(iid, tags=("cortina",))
+
+
+def clear_playing():
+    for iid in tree.get_children():
+        select_genre(iid)
 
 
 
@@ -333,6 +342,7 @@ def on_stop():
         tree.selection_set(current_song)
         is_playing = False
         player.delete_tmp_files()
+        global_vars.wave_canvas.delete('all')
 
 
 
@@ -392,14 +402,21 @@ def make_drop(event):
         select_playing(current_song)
     return event.action
 
+current_line = None
+
+def drop_position(event):
+    y = event.y_root - event.widget.winfo_rooty()
+    tree = event.widget
+    currnet_item = tree.identify_row(y)
+    select_mouse_row(currnet_item)
 
 
 def drop(event):
+    global current_line
     def worker():
         make_drop(event)
     thread = threading.Thread(target=worker)
     thread.start()
-
 
 settings = config.load_settings()
 
@@ -473,6 +490,10 @@ def build_gui():
     #slider = ttk.Scale(root, from_=0, to=100, orient="horizontal")
     slider = customtkinter.CTkSlider(master=root, from_=0, to=100, command=set_volume)
     slider.pack(side="top", fill="x", padx=10, pady=5)
+
+    global_vars.wave_canvas = customtkinter.CTkCanvas(master=root, width=800, height=50)
+    global_vars.wave_canvas.pack(side="top", fill="x", padx=10, pady=5)
+
 
     progressbar = customtkinter.CTkProgressBar(master=root)
     progressbar.pack(side="top", fill="x", padx=10, pady=5)
@@ -563,6 +584,8 @@ def build_gui():
     # Konfiguracja tagów
     tree.tag_configure("play", background="yellow", foreground="blue")
 
+    tree.tag_configure("over", background="silver", foreground="white")
+
     tree.tag_configure("cortina", foreground="red")
     tree.tag_configure("vals",foreground="green")
     tree.tag_configure("milonga", foreground="yellow")
@@ -581,6 +604,7 @@ def build_gui():
 
     tree.drop_target_register(DND_FILES)
     tree.dnd_bind('<<Drop>>', drop)
+    tree.dnd_bind('<<DropPosition>>',drop_position)
 
     return root, tree
 

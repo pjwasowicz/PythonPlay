@@ -15,7 +15,19 @@ import tempfile
 import wave
 import time
 import re
+import threading
+from io import BytesIO
+from tkinter import PhotoImage
 
+import global_vars
+
+import tkinter as tk
+
+import matplotlib
+matplotlib.use('Agg')  # Wyłącza interaktywny tryb graficzny
+
+import matplotlib.pyplot as plt
+from PIL import Image, ImageTk
 import io
 
 tmp_files =[]
@@ -168,6 +180,48 @@ def low_pass_filter(data, sample_rate, cutoff_freq):
     return filtered_data
 
 
+def make_wave(pcm_data,sample_rate):
+    global_canvas = global_vars.wave_canvas
+    n_samples = len(pcm_data)
+    plt.figure(figsize=(15, 5))
+    #times = np.linspace(0, n_samples / sample_rate, num=n_samples)
+
+    step = 10
+    times = np.linspace(0, len(pcm_data) / sample_rate, num=len(pcm_data))[::step]  # Wybieranie co 10. punktu
+    pcm_data_reduced = pcm_data[::step]
+
+    plt.plot(times, pcm_data_reduced)
+    plt.axis('off')
+    plt.subplots_adjust(left=0, right=1)
+    plt.xlim(times[0], times[-1])
+
+    buf = BytesIO()
+    plt.savefig(buf, format="png")
+    buf.seek(0)
+    img = Image.open(buf)
+
+    canvas_width = global_canvas.winfo_width()
+    canvas_height = global_canvas.winfo_height()
+
+    img = img.resize((canvas_width,canvas_height))
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
+        temp_filename = tmpfile.name
+        img.save(temp_filename)
+
+    buf.close()
+
+    plt.clf()  # Czyści bieżący wykres
+    plt.close()
+
+    tk_img = tk.PhotoImage(file=temp_filename)
+
+    global_canvas.create_image(0, 0, anchor="nw", image=tk_img)
+    global_canvas.image = tk_img
+    os.remove(temp_filename)
+
+
+
 def play_from_file(file, pos=0,
                    normalize_volume=True,
                    low_frequency = 10,
@@ -180,10 +234,20 @@ def play_from_file(file, pos=0,
     sample_rate = audio_segment.frame_rate
     pcm_data = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
 
+    #make_wave(pcm_data, sample_rate)
+
+    def worker():
+        make_wave(pcm_data, sample_rate)
+    thread = threading.Thread(target=worker)
+    thread.start()
+
 
 
     left_channel = pcm_data[0::2]
     right_channel = pcm_data[1::2]
+
+
+
 
 
 

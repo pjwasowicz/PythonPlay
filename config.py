@@ -1,11 +1,11 @@
 import plistlib
 import os
 
-from player import converted_files
 
 DEBUG = False
 
-pause_time = 3000
+
+pause_time = 1000
 fade_time = 3000
 target_rms = 20
 
