@@ -8,9 +8,9 @@ from player import converted_files
 
 
 def save_to_m3u8(files, output_path, save_external=False):
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         f.write("#EXTM3U\n")
-        converted_files=player.get_converted_files()
+        converted_files = player.get_converted_files()
         # Iteruj przez listę plików
         for file, _ in files:
             file_name = file
@@ -22,14 +22,14 @@ def save_to_m3u8(files, output_path, save_external=False):
             f.write(f"#EXTINF:-1,{file_name}\n")
             f.write(f"{file_name}\n")
 
+
 def save_to_m3u8_x(files, output_path):
     playlist = m3u8.M3U8()
     for file in files:
         segment = m3u8.Segment(uri=file)
         playlist.segments.append(segment)
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         f.write(playlist.dumps())
-
 
 
 def get_all_tags(file_path):
@@ -40,12 +40,13 @@ def get_all_tags(file_path):
             # Zbieramy wszystkie dostępne tagi dla każdej ścieżki
             for key, value in track.to_data().items():
                 tags[key] = value
-        if 'title' not in tags.keys():
-            tags['title'] = tags['file_name']
+        if "title" not in tags.keys():
+            tags["title"] = tags["file_name"]
         return tags
     except Exception as e:
         print(f"Nie można odczytać tagów z pliku {file_path}: {e}")
         return {}
+
 
 def get_audio_tags_from_m3u8(m3u8_file):
     if not os.path.exists(m3u8_file):
@@ -65,7 +66,3 @@ def get_audio_tags_from_m3u8(m3u8_file):
             print(f"Plik nie istnieje: {file_path}")
 
     return tags_list
-
-
-
-
