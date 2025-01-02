@@ -14,6 +14,7 @@ from tkinter import PhotoImage
 from tkinterdnd2 import *
 from tkinter import filedialog
 import threading
+import signal
 import platform
 
 import re
@@ -61,6 +62,9 @@ def export_playlist():
     if file_path:
         files = utils.get_files_from_tree(tree, songs)
         lists.save_m3u(files, file_path, save_external=True)
+
+
+# Zarejestrowanie funkcji obsługi sygnału SIGTERM
 
 
 def on_closing():
@@ -450,7 +454,7 @@ def drop(event):
     def worker():
         make_drop(event)
 
-    thread = threading.Thread(target=worker)
+    thread = threading.Thread(target=worker, daemon=True)
     thread.start()
 
 
@@ -765,7 +769,7 @@ def check_music():
         update_loudness()
 
     if not is_converting:
-        thread = threading.Thread(target=worker)
+        thread = threading.Thread(target=worker,daemon=True)
         thread.start()
 
 

@@ -290,7 +290,7 @@ def play_from_file(
     def worker():
         make_wave(pcm_data, sample_rate)
 
-    thread = threading.Thread(target=worker)
+    thread = threading.Thread(target=worker,daemon=True)
     thread.start()
 
     left_channel = pcm_data[0::2]
