@@ -185,6 +185,9 @@ def select_mouse_row(item):
 
         # Ustaw podświetlenie na nowym wierszu
         if item:
+            all_items = tree.get_children()
+            if item not in all_items:
+                return
             tree.item(item, tags=("over", ))
 
         # Zaktualizuj ostatnio podświetlony wiersz
@@ -215,6 +218,9 @@ def on_mouse_leave(event):
     global is_playing
     clear_playing()
     if is_playing:
+        all_items = tree.get_children()
+        if current_song not in all_items:
+            return
         tree.item(current_song, tags=("play", ))
 
 
@@ -257,6 +263,10 @@ def get_next_song(current_iid):
 
 def select_genre(iid):
     if iid is not None:
+        all_items = tree.get_children()
+        if iid not in all_items:
+            return
+
         tree.item(iid, tags=())
         tags = songs[iid][1]
         if "genre" in tags:
@@ -276,7 +286,9 @@ def clear_playing():
 
 def select_playing(the_song):
     clear_playing()
-    tree.item(the_song, tags=("play", ))
+    all_items = tree.get_children()
+    if the_song in all_items:
+        tree.item(the_song, tags=("play",))
 
 
 current_postion = 0
@@ -358,11 +370,12 @@ def on_stop():
         player.fade()
         clear_playing()
         player.reset_progress()
-        tree.selection_set(current_song)
+        all_items = tree.get_children()
+        if current_song in all_items:
+            tree.selection_set(current_song)
         is_playing = False
         #player.delete_tmp_files()
         global_vars.wave_canvas.delete("all")
-
 
 def make_drop(event):
     global current_song
@@ -391,6 +404,7 @@ def make_drop(event):
                 new_file = player.can_load_sound(file)
                 if new_file is not None:
                     iid = str(uuid.uuid4())
+                    #vol = player.get_loudness_from_file(new_file)
                     songs[iid] = (new_file, tags)
                     values = [tags.get(colum, "") for colum in columns]
 
@@ -704,24 +718,76 @@ def load_default_playlist(tree):
 
 waiting_time = 0
 
+line = None
+def update_line():
+    global line
+    if line is not None:
+        global_vars.wave_canvas.delete(line)  # Usuń poprzednią kreskę
+
+    pos = player.get_pos()+player.get_start_pos()  # Pobierz aktualną pozycję
+    duration = player.get_duration()  # Pobierz całkowitą długość
+
+    if duration > 0:
+        # Oblicz proporcję pozycji na szerokość Canvas
+        x_pos = (pos / duration) * global_vars.wave_canvas.winfo_width()
+        line = global_vars.wave_canvas.create_line(x_pos, 0, x_pos, global_vars.wave_canvas.winfo_height(), fill="red", width=2)
+
+is_converting = False
+def update_loudness():
+    global is_converting
+    is_converting = True
+
+    copy_cat = songs.copy()
+    for id in copy_cat.keys():
+        data = songs[id]
+        if len(data) == 2:
+            file = data[0]
+            print('Calculating loudness: ', file)
+            vol = player.get_loudness_from_file(file)
+            new_data = list(data)
+            new_data.append(vol)
+            songs[id] = tuple(new_data)
+    is_converting = False
 
 def check_music():
+
+
+
     global is_playing
     global current_song
     global waiting_time
 
     setup_buttons()
 
+    #update_loudness()
+
+    def worker():
+        update_loudness()
+
+    if not is_converting:
+        thread = threading.Thread(target=worker)
+        thread.start()
+
+
+
     if player.get_busy():
-        progressbar.set(player.get_progress())
+        #progressbar.set(player.get_progress())
+        update_line()
         title = songs[current_song][1]["title"]
         pos = player.get_pos()
+        total = player.get_duration()
+        correction = player.get_loudness_corretion()
         status_bar.configure(
-            text="   {title}  [{minutes}:{seconds:02}]".format(
+            text="   {title}  [{minutes}:{seconds:02}] of [{minutes_total:00}:{seconds_total:02}]  [vol: {correction}%]".format(
                 title=title,
-                minutes=pos // 60000,  # Liczba minut
-                seconds=(pos // 1000) % 60,  # Liczba sekund
+                minutes=pos // 60000,
+                seconds=(pos // 1000) % 60,
+                minutes_total=int(total // 60000),
+                seconds_total=int((total  // 1000) % 60),
+                correction = int(correction*100)
             ))
+
+
     else:
         status_bar.configure(text="")
     # print(player.get_busy(),is_paused)
@@ -752,7 +818,8 @@ def check_music():
 
 player.init_player()
 root, tree = build_gui()
-root.after(100, check_music)
+
+root.after(dt, check_music)
 
 songs = load_default_playlist(tree)
 player.load_converted_files()

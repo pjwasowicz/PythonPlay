@@ -5,7 +5,7 @@ import os
 DEBUG = False
 
 
-pause_time = 1000
+pause_time = 500
 fade_time = 3000
 target_rms = 20
 

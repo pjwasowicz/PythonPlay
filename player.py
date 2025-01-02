@@ -34,6 +34,8 @@ import io
 tmp_files = []
 
 current_duration = 0
+loudnes_correction = 0
+
 start_pos = 0
 
 allowed_files = [".mp3", ".ogg"]
@@ -43,6 +45,8 @@ converted_files = {}
 current_volume = 0.0
 
 import pygame._sdl2.audio as sdl2_audio
+
+loudnes_table = {}
 
 
 def delete_tmp_files():
@@ -110,24 +114,26 @@ def get_devices(capture_devices: bool = False):
     return devices
 
 
-def get_loudness(file_path):
-    data, rate = sf.read(file_path)
+def pcm_to_float(pcm_data, bit_depth=16):
+    max_value = float(2 ** (bit_depth - 1))
+    return pcm_data.astype(np.float32) / max_value
+
+
+
+
+def get_loudness(data,rate):
     meter = pyln.Meter(rate)
-    loudness = meter.integrated_loudness(data)
+    loudness = meter.integrated_loudness(pcm_to_float(data))
     return loudness
-
-
-def calculate_replay_volume(file_path, target_lufs=-20):
-    loudness = get_loudness(file_path)
-    replay_gain = target_lufs - loudness
-    linear_volume = 10 ** (replay_gain / 20)
-    return linear_volume
 
 
 def set_volume(volume):
     global current_volume
     current_volume = volume
-    pygame.mixer.music.set_volume(volume)
+    v=volume*get_loudness_corretion()
+    if v>1:
+        v=1
+    pygame.mixer.music.set_volume(v)
 
 
 def pause():
@@ -148,6 +154,8 @@ def reset_progress():
     current_duration = 0
     start_pos = 0
 
+def get_loudness_corretion():
+    return loudnes_correction
 
 def get_progress():
     global current_duration
@@ -164,6 +172,13 @@ def get_pos():
     return pygame.mixer_music.get_pos()
 
 
+def get_start_pos():
+    return start_pos
+
+
+def get_duration():
+    return current_duration*1000
+
 def fade():
     pygame.mixer.music.fadeout(config.fade_time)
 
@@ -176,7 +191,7 @@ def decode_mp3_to_pcm(input_mp3_path):
     from pydub import AudioSegment
 
     audio = AudioSegment.from_file(input_mp3_path)
-    audio = audio.set_frame_rate(44100).set_channels(2)  # Ustawienie mono i 44.1 kHz
+    audio = audio.set_frame_rate(44100).set_channels(2)
     return audio
 
 
@@ -245,12 +260,20 @@ def make_wave(pcm_data, sample_rate):
 
     os.remove(temp_filename)
 
+def get_loudness_from_file(file):
+    audio_segment = decode_mp3_to_pcm(file)
+    sample_rate = audio_segment.frame_rate
+    pcm_data = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
+    loudness = get_loudness(pcm_data,sample_rate)
+    return loudness
+
 
 def play_from_file(
-    file, pos=0, normalize_volume=True, low_frequency=10, high_frequency=20000
+    file, pos=0, normalize_volume=True, low_frequency=10, high_frequency=20000,song_id=None,files=None
 ):
     global tmp_files
     global current_volume
+    global loudnes_correction
     start_time = time.time()
     audio_segment = decode_mp3_to_pcm(file)
 
@@ -287,13 +310,27 @@ def play_from_file(
     filtered_audio[1::2] = filtered_right
 
     if normalize_volume:
-        rms = np.sqrt(np.mean(np.square(pcm_data)))
 
-        scaling_factor = config.target_rms / rms
-        new_volume = scaling_factor * current_volume
+        data = files[song_id]
+        if len(data) == 3:
+            l =data[2]
+        else:
+            print("Extra loudness for file:",file)
+            l = get_loudness(pcm_data,sample_rate)
+        #l=get_loudness_from_file(file)
+        target_lufs = -20
+        difference = target_lufs - l
+
+        scaling_factor = 10 ** (difference / 20.0)
+
+        new_volume = scaling_factor* current_volume
         if new_volume > 1:
             new_volume = 1
-        print("Volume:", current_volume, new_volume, scaling_factor)
+
+        loudnes_correction = scaling_factor
+
+        print("Volume:",current_volume, new_volume, scaling_factor,l)
+
         pygame.mixer.music.set_volume(new_volume)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
@@ -333,25 +370,6 @@ def play_from_file(
     return duration
 
 
-def play_from_file_old(file, pos=0):
-    global current_duration
-    global start_pos
-    pygame.mixer.music.load(file)
-    audio = MP3(file)
-    duration = audio.info.length
-    current_duration = duration
-    start_pos = start_pos + pos
-    pos = pos / 1000
-
-    fade_time = 0
-    if pos > 0:
-        fade_time = config.fade_time
-    pygame.mixer.music.play(fade_ms=fade_time, start=pos)
-
-    return duration
-    # time.sleep(3)
-
-
 def extract_h_value(input_string, default_value=20000):
     # Wzorzec do wyszukiwania liczby po "H:"
     match = re.search(r"h:(\d+)", input_string.lower())
@@ -381,6 +399,8 @@ def play_from_list(song_id, songs, pos=0):
                 normalize_volume=True,
                 low_frequency=10,
                 high_frequency=high_frequency,
+                song_id=song_id,
+                files=songs
             )
         except Exception as e:
             print(str(e))
