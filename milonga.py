@@ -746,10 +746,13 @@ def update_loudness():
         data = songs[id]
         if len(data) == 2:
             file = data[0]
-            print('Calculating loudness: ', file)
+            print('Calculating loudness and silence: ', file)
             vol = player.get_loudness_from_file(file)
             new_data = list(data)
             new_data.append(vol)
+            start_cut, end_cut = player.detect_silence_start_end_from_file(file, 200, -56)
+            new_data.append(start_cut)
+            new_data.append(end_cut)
             songs[id] = tuple(new_data)
     is_converting = False
 

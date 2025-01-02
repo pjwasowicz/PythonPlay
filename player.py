@@ -267,6 +267,10 @@ def get_loudness_from_file(file):
     loudness = get_loudness(pcm_data,sample_rate)
     return loudness
 
+def detect_silence_start_end_from_file(file, min_silence_len,silence_tresh):
+    audio_segment = decode_mp3_to_pcm(file)
+    return utils.detect_silence_start_end(audio_segment,min_silence_len,silence_tresh)
+
 
 def play_from_file(
     file, pos=0, normalize_volume=True, low_frequency=10, high_frequency=20000,song_id=None,files=None
@@ -277,8 +281,18 @@ def play_from_file(
     start_time = time.time()
     audio_segment = decode_mp3_to_pcm(file)
 
-    start_cut, end_cut = utils.detect_silence_start_end(audio_segment, 200, -56)
-    print("Cut: ",start_cut,end_cut)
+    data = files[song_id]
+    if len(data) > 2:
+        start_cut = data[3]
+        end_cut = data[4]
+
+    else:
+        print("Extra cut for file:", file)
+        start_cut, end_cut = utils.detect_silence_start_end(audio_segment, 200, -56)
+    print("Cut: ", start_cut, end_cut)
+    #start_cut, end_cut = detect_silence_start_end_from_file(file, 200, -56)
+
+
     audio_segment = audio_segment[start_cut:end_cut]
 
 
@@ -312,7 +326,7 @@ def play_from_file(
     if normalize_volume:
 
         data = files[song_id]
-        if len(data) == 3:
+        if len(data) > 2:
             l =data[2]
         else:
             print("Extra loudness for file:",file)
