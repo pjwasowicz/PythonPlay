@@ -19,11 +19,8 @@ import re
 import uuid
 import player
 from tkinter import messagebox
-
-# from config import pause_time
-
+import tempfile
 from config import DEBUG
-
 import customtkinter
 
 customtkinter.set_appearance_mode("light")
@@ -57,12 +54,12 @@ def about():
 def export_playlist():
     file_path = filedialog.asksaveasfilename(title="Export to m3u8 file",
                                              filetypes=[("Playlist file:",
-                                                         "*.m3u8")])
+                                                         "*.m3u")])
 
     # Jeśli użytkownik wybrał plik
     if file_path:
         files = utils.get_files_from_tree(tree, songs)
-        lists.save_to_m3u8(files, file_path, save_external=True)
+        lists.save_m3u(files, file_path, save_external=True)
 
 
 def on_closing():
@@ -71,6 +68,8 @@ def on_closing():
         messagebox.showwarning("Warning",
                                "Cannot close application while is playing. ")
     else:
+        player.quit_device()
+        player.delete_tmp_files()
         root.destroy()
 
 
@@ -160,7 +159,7 @@ def bUp(event):
             tv.move(s, "", moveto)
 
         files = utils.get_files_from_tree(tree, songs)
-        lists.save_to_m3u8(files, config.get_default_playlist_full_file_name())
+        lists.save_m3u(files, config.get_default_playlist_full_file_name())
         player.save_converted_files()
         print("Saved")
         is_dragging = False
@@ -260,12 +259,12 @@ def select_genre(iid):
         tree.item(iid, tags=())
         tags = songs[iid][1]
         if "genre" in tags:
-            genre = tags["genre"]
-            if "milonga" in genre.lower():
+            genre = tags["genre"].lower()
+            if "milonga" in genre:
                 tree.item(iid, tags=("milonga", ))
-            if "vals" in genre.lower():
+            if "vals" in genre:
                 tree.item(iid, tags=("vals", ))
-            if "cortina" in genre.lower():
+            if "cortina" in genre:
                 tree.item(iid, tags=("cortina", ))
 
 
@@ -324,7 +323,7 @@ def on_delete():
                 player.remove_converted_file_from_list(file_name)
 
         files = utils.get_files_from_tree(tree, songs)
-        lists.save_to_m3u8(files, config.get_default_playlist_full_file_name())
+        lists.save_m3u(files, config.get_default_playlist_full_file_name())
         player.save_converted_files()
 
 
@@ -360,7 +359,7 @@ def on_stop():
         player.reset_progress()
         tree.selection_set(current_song)
         is_playing = False
-        player.delete_tmp_files()
+        #player.delete_tmp_files()
         global_vars.wave_canvas.delete("all")
 
 
@@ -412,7 +411,7 @@ def make_drop(event):
         progressbar.set(start_pos)
 
     files = utils.get_files_from_tree(tree, songs)
-    lists.save_to_m3u8(files, config.get_default_playlist_full_file_name())
+    lists.save_m3u(files, config.get_default_playlist_full_file_name())
     player.save_converted_files()
     clear_playing()
     if current_song is not None:
@@ -459,6 +458,24 @@ def set_audio_device(event):
     is_playing = False
     volume = float(val) / 100
     player.set_volume(volume)
+
+
+oimage = None
+def resize(event):
+    global oimage
+    original_image = global_vars.canvas_image
+    if original_image is not None:
+        width = event.width
+        height = event.height
+        img = original_image.resize((width,height))
+        canvas = event.widget
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
+            temp_filename = tmpfile.name
+            img.save(temp_filename)
+
+        oimage = tk.PhotoImage(file=temp_filename)
+        canvas.create_image(0, 0, anchor="nw", image=oimage)
+        os.remove(temp_filename)
 
 
 class CTk(customtkinter.CTk, TkinterDnD.DnDWrapper):
@@ -524,6 +541,7 @@ def build_gui():
                                                       width=800,
                                                       height=50)
     global_vars.wave_canvas.pack(side="top", fill="x", padx=10, pady=5)
+    global_vars.wave_canvas.bind("<Configure>", resize)
 
     progressbar = customtkinter.CTkProgressBar(master=root)
     progressbar.pack(side="top", fill="x", padx=10, pady=5)
@@ -621,6 +639,7 @@ def build_gui():
     # treestyle.map('Treeview', background=[('selected', bg_color)], foreground=[('selected', selected_color)])
     root.bind("<<TreeviewSelect>>", lambda event: root.focus_set())
 
+    #tree = CTkTreeview(root,
     tree = ttk.Treeview(root,
                         columns=columns,
                         selectmode="none",

@@ -10,7 +10,7 @@ fade_time = 3000
 target_rms = 20
 
 
-default_m3u8_file_path = "default.m3u8"
+default_m3u8_file_path = "default.m3u"
 converted_files_file_name = "converted_files.json"
 
 app_name = "Milonga"

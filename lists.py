@@ -6,7 +6,9 @@ import player
 from config import DEBUG
 from player import converted_files
 
+import urllib.parse
 
+from urllib.parse import quote
 def save_to_m3u8(files, output_path, save_external=False):
     with open(output_path, "w") as f:
         f.write("#EXTM3U\n")
@@ -19,11 +21,20 @@ def save_to_m3u8(files, output_path, save_external=False):
                 if file in converted_files.keys():
                     file_name = converted_files[file]
 
-            f.write(f"#EXTINF:-1,{file_name}\n")
-            f.write(f"{file_name}\n")
+            normalized_path = os.path.normpath(file_name)
+
+            unix_style_path = normalized_path.replace("\\", "/")
+
+            encoded_path = quote(unix_style_path, safe=":/")
 
 
-def save_to_m3u8_x(files, output_path):
+            url = f"file:///{encoded_path}"
+
+            f.write(f"#EXTINF:-1,{url}\n")
+            f.write(f"{url}\n")
+
+
+def save_to_m3u8x(files, output_path):
     playlist = m3u8.M3U8()
     for file in files:
         segment = m3u8.Segment(uri=file)
@@ -31,6 +42,17 @@ def save_to_m3u8_x(files, output_path):
     with open(output_path, "w") as f:
         f.write(playlist.dumps())
 
+def save_m3u(files, output_path):
+    with open(output_path, "w", encoding="utf-8") as f:
+        for file in files:
+            fname = file[0]
+            f.write(f"{fname}\n")
+
+def read_m3u(file_path):
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+        cleaned_lines = [line.strip() for line in lines]
+    return cleaned_lines
 
 def get_all_tags(file_path):
     try:
@@ -49,6 +71,27 @@ def get_all_tags(file_path):
 
 
 def get_audio_tags_from_m3u8(m3u8_file):
+    if not os.path.exists(m3u8_file):
+        return None
+
+    songs = read_m3u(m3u8_file)
+
+    tags_list = []
+
+    for file_path in songs:
+        normalized_path = os.path.normpath(file_path)
+
+        if os.path.exists(normalized_path):
+            tags = get_all_tags(normalized_path)
+            tags_list.append({normalized_path: tags})
+        else:
+            print(f"Plik nie istnieje: {normalized_path}")
+
+    return tags_list
+
+
+
+def get_audio_tags_from_m3u8_x(m3u8_file):
     if not os.path.exists(m3u8_file):
         return None
     playlist = m3u8.load(m3u8_file)

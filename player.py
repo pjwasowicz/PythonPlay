@@ -17,7 +17,7 @@ import time
 import re
 import threading
 from io import BytesIO
-from tkinter import PhotoImage
+
 
 import global_vars
 
@@ -95,6 +95,9 @@ def can_load_sound(file_path):
         print("Cannot load: ", file_path, e)
         return None
 
+
+def quit_device():
+    pygame.mixer.quit()
 
 def set_device(selected_device):
     pygame.mixer.quit()  # Zatrzymanie aktualnego urządzenia
@@ -197,10 +200,12 @@ def low_pass_filter(data, sample_rate, cutoff_freq):
     filtered_data = lfilter(b, a, data)
     return filtered_data
 
-
+oimage = None
 def make_wave(pcm_data, sample_rate):
+    global oimage
     global_canvas = global_vars.wave_canvas
-    n_samples = len(pcm_data)
+
+    #n_samples = len(pcm_data)
     plt.figure(figsize=(15, 5))
     # times = np.linspace(0, n_samples / sample_rate, num=n_samples)
 
@@ -225,19 +230,19 @@ def make_wave(pcm_data, sample_rate):
 
     img = img.resize((canvas_width, canvas_height))
 
+    global_vars.canvas_image = img
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
         temp_filename = tmpfile.name
         img.save(temp_filename)
 
     buf.close()
-
-    plt.clf()  # Czyści bieżący wykres
+    plt.clf()
     plt.close()
+    oimage = tk.PhotoImage(file=temp_filename)
 
-    tk_img = tk.PhotoImage(file=temp_filename)
+    global_vars.image_id = global_canvas.create_image(0, 0, anchor="nw", image=oimage)
 
-    global_canvas.create_image(0, 0, anchor="nw", image=tk_img)
-    global_canvas.image = tk_img
     os.remove(temp_filename)
 
 
