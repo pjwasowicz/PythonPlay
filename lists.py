@@ -42,10 +42,15 @@ def save_to_m3u8x(files, output_path):
     with open(output_path, "w") as f:
         f.write(playlist.dumps())
 
-def save_m3u(files, output_path):
+def save_m3u(files, output_path, save_external=False):
     with open(output_path, "w", encoding="utf-8") as f:
         for file in files:
             fname = file[0]
+
+            if save_external:
+                if fname in converted_files.keys():
+                    fname = converted_files[file]
+
             f.write(f"{fname}\n")
 
 def read_m3u(file_path):
