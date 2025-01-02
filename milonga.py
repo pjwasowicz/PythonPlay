@@ -14,6 +14,7 @@ from tkinter import PhotoImage
 from tkinterdnd2 import *
 from tkinter import filedialog
 import threading
+import platform
 
 import re
 import uuid
@@ -478,6 +479,7 @@ def resize(event):
         os.remove(temp_filename)
 
 
+
 class CTk(customtkinter.CTk, TkinterDnD.DnDWrapper):
 
     def __init__(self, *args, **kwargs):
@@ -512,25 +514,25 @@ def build_gui():
     icon = PhotoImage(file="icon.png")
     root.iconphoto(True, icon)
     root.title("Milonga")
-    # Ustawienie menu w aplikacji
 
     menu_bar = tk.Menu(root)
 
-    app_menu = tk.Menu(menu_bar, name="apple")
-    app_menu.add_command(label="About...", command=about)
-    app_menu.add_command(label="Export playlist", command=export_playlist)
+    if platform.system() == "Darwin":  # macOS
+        app_menu = tk.Menu(menu_bar, name="apple")
+        menu_bar.add_cascade(menu=app_menu)
+    else:
+        app_menu = tk.Menu(menu_bar, tearoff=0)
+        menu_bar.add_cascade(label='File',menu=app_menu)
+
+    app_menu.add_command(label="About Milonga", command=about)
+    app_menu.add_command(label="Export playlist",command=export_playlist)
     app_menu.add_separator()
-    # app_menu.add_command(label="Zamknij", command=app.quit)
-    menu_bar.add_cascade(menu=app_menu)
-    # menu_bar.delete(0,'end')
+    app_menu.add_command(label="Quit", command=root.quit)
+
     root.config(menu=menu_bar)
-    # menu_bar.delete(-1)
-    # Pasek narzędzi
-    # toolbar = tk.Frame(root, bg="#f0f0f0", bd=1, relief="raised")
     toolbar = customtkinter.CTkFrame(root)
     toolbar.pack(side="top", fill="x")
 
-    # slider = ttk.Scale(root, from_=0, to=100, orient="horizontal")
     slider = customtkinter.CTkSlider(master=root,
                                      from_=0,
                                      to=100,

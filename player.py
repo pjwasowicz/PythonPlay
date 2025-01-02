@@ -246,6 +246,31 @@ def make_wave(pcm_data, sample_rate):
     os.remove(temp_filename)
 
 
+
+def remove_sil(sound,sample_rate):
+    return sound
+
+
+#import numpy as np
+
+def remove_sil_x(audio_data, sample_rate, threshold=0.001):
+
+  audio_data = np.frombuffer(audio_data, dtype=np.int16) / 32768.0  # Normalizacja do zakresu [-1, 1]
+
+  # Obliczanie średniej amplitudy absolutnej dla każdego okna
+  window_size = int(sample_rate * 0.05)  # Okno 50ms
+  step_size = int(window_size / 2)
+  rms = np.sqrt(np.mean(audio_data**2))
+  rms = np.convolve(rms, np.ones(window_size) / window_size, mode='valid')
+
+  # Znalezienie indeksów początku i końca fragmentu z dźwiękiem
+  start_index = np.argmax(rms > threshold)
+  end_index = len(rms) - np.argmax(rms[::-1] > threshold) - 1
+
+  # Wycięcie fragmentu z dźwiękiem
+  return audio_data[start_index*step_size:end_index*step_size]
+
+
 def play_from_file(
     file, pos=0, normalize_volume=True, low_frequency=10, high_frequency=20000
 ):
@@ -297,7 +322,10 @@ def play_from_file(
             output_wav.setnchannels(2)  # Stereo
             output_wav.setsampwidth(2)  # 16-bitowe dane
             output_wav.setframerate(sample_rate)
-            output_wav.writeframes(filtered_audio.tobytes())
+            trim_audio = remove_sil(filtered_audio.tobytes(),sample_rate)
+            output_wav.writeframes(trim_audio)
+
+
 
     global current_duration
     global start_pos
