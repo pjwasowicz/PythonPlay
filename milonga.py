@@ -1,7 +1,14 @@
 import os
-import sys
 
-current_directory = os.getcwd()#
+the_path = os.path.dirname(os.path.abspath(__file__))
+path_to_remove = os.path.join("lib", "library.zip")
+if the_path.endswith(path_to_remove):
+    the_path = the_path[: -len(path_to_remove)]
+print("App path:", the_path)
+
+os.chdir(the_path)
+
+current_directory = os.getcwd()
 p = current_directory + "/ffmpeg/"
 os.environ["PATH"] += os.pathsep + p
 
@@ -543,7 +550,7 @@ def build_gui():
 
     root = CTk()
     root.protocol("WM_DELETE_WINDOW", on_closing)
-    icon = PhotoImage(file="icons/icon.png")
+    icon = PhotoImage(file="./icons/icon.png")
     root.iconphoto(True, icon)
     root.title("Milonga")
 
@@ -587,11 +594,11 @@ def build_gui():
     )
     audio_device_dropdown.pack(side="right", padx=0)
 
-    play_icon = utils.load_and_resize_image(file="icons/play.png")
-    stop_icon = utils.load_and_resize_image(file="icons/stop.png")
-    delete_icon = utils.load_and_resize_image(file="icons/delete.png")
-    pause_icon = utils.load_and_resize_image(file="icons/pause.png")
-    next_icon = utils.load_and_resize_image(file="icons/next.png")
+    play_icon = utils.load_and_resize_image(file="./icons/play.png")
+    stop_icon = utils.load_and_resize_image(file="./icons/stop.png")
+    delete_icon = utils.load_and_resize_image(file="./icons/delete.png")
+    pause_icon = utils.load_and_resize_image(file="./icons/pause.png")
+    next_icon = utils.load_and_resize_image(file="./icons/next.png")
 
     start_button = customtkinter.CTkButton(
         toolbar, image=play_icon, command=on_start, text="Start"

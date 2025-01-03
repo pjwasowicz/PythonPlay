@@ -38,7 +38,7 @@ includes = []
 excludes = []
 packages = []
 
-base = None
+base = ""
 
 if platform.system() == 'Windows':
     base = 'Win32GUI'
