@@ -14,16 +14,15 @@ from tkinter import PhotoImage
 from tkinterdnd2 import *
 from tkinter import filedialog
 import threading
-import signal
 import platform
 
 import re
 import uuid
 import player
-from tkinter import messagebox
 import tempfile
 from config import DEBUG
 import customtkinter
+from CTkMessagebox import CTkMessagebox
 
 customtkinter.set_appearance_mode("light")
 customtkinter.set_default_color_theme("blue")
@@ -50,28 +49,27 @@ audio_device_dropdown = None
 
 
 def about():
-    messagebox.showinfo("Milonga", "Milonga DJ Soft - Paweł Wąsowicz")
+    CTkMessagebox(title="Info", message="Milonga DJ Soft - Paweł Wąsowicz")
 
 
 def export_playlist():
-    file_path = filedialog.asksaveasfilename(title="Export to m3u8 file",
-                                             filetypes=[("Playlist file:",
-                                                         "*.m3u")])
+    file_path = filedialog.asksaveasfilename(
+        title="Export to m3u8 file", filetypes=[("Playlist file:", "*.m3u")]
+    )
 
-    # Jeśli użytkownik wybrał plik
     if file_path:
         files = utils.get_files_from_tree(tree, songs)
         lists.save_m3u(files, file_path, save_external=True)
 
 
-# Zarejestrowanie funkcji obsługi sygnału SIGTERM
-
-
 def on_closing():
     global is_playing
     if is_playing:
-        messagebox.showwarning("Warning",
-                               "Cannot close application while is playing. ")
+        CTkMessagebox(
+            title="Warning",
+            message="Cannot close application while is playing.",
+            icon="warning",
+        )
     else:
         player.quit_device()
         player.delete_tmp_files()
@@ -94,9 +92,6 @@ def setup_buttons():
     global delete_button
     global pause_button
     global next_button
-    # normal
-    # if start_button.cget("state") != "disabled":
-    #   start_button.configure(state="disabled")
 
     row_count = len(tree.get_children())
 
@@ -111,21 +106,18 @@ def setup_buttons():
         if is_paused:
             distable_button(start_button)
             distable_button(stop_button)
-            # distable_button(delete_button)
             enable_button(pause_button)
             distable_button(next_button)
 
         if is_playing and not is_paused:
             distable_button(start_button)
             enable_button(stop_button)
-            # distable_button(delete_button)
             enable_button(pause_button)
             enable_button(next_button)
 
         if not is_playing:
             enable_button(start_button)
             distable_button(stop_button)
-            # enable_button(delete_button)
             distable_button(pause_button)
             distable_button(next_button)
             enable_button(audio_device_dropdown)
@@ -168,37 +160,26 @@ def bUp(event):
         player.save_converted_files()
         print("Saved")
         is_dragging = False
-    # tree.selection_set(())
 
 
 def bUp_Shift(event):
     pass
 
 
-# values= None
-
-
 def select_mouse_row(item):
     global last_highlighted
     global is_playing
     if item != last_highlighted:
-        # Usuń podświetlenie z poprzedniego wiersza
         if last_highlighted:
             select_genre(last_highlighted)
-            # tree.item(last_highlighted, tags=())
-
-        # Ustaw podświetlenie na nowym wierszu
         if item:
             all_items = tree.get_children()
             if item not in all_items:
                 return
-            tree.item(item, tags=("over", ))
-
-        # Zaktualizuj ostatnio podświetlony wiersz
-
+            tree.item(item, tags=("over",))
         last_highlighted = item
         if is_playing:
-            tree.item(current_song, tags=("play", ))
+            tree.item(current_song, tags=("play",))
 
 
 def on_mouse_enter(event):
@@ -225,7 +206,7 @@ def on_mouse_leave(event):
         all_items = tree.get_children()
         if current_song not in all_items:
             return
-        tree.item(current_song, tags=("play", ))
+        tree.item(current_song, tags=("play",))
 
 
 def bMove(event):
@@ -276,11 +257,11 @@ def select_genre(iid):
         if "genre" in tags:
             genre = tags["genre"].lower()
             if "milonga" in genre:
-                tree.item(iid, tags=("milonga", ))
+                tree.item(iid, tags=("milonga",))
             if "vals" in genre:
-                tree.item(iid, tags=("vals", ))
+                tree.item(iid, tags=("vals",))
             if "cortina" in genre:
-                tree.item(iid, tags=("cortina", ))
+                tree.item(iid, tags=("cortina",))
 
 
 def clear_playing():
@@ -323,21 +304,30 @@ def on_delete():
     selected_items = tree.selection()
 
     if not selected_items:
-        messagebox.showwarning("None selected", "Select rows.")
+        CTkMessagebox(title="None selected", message="Select rows.", icon="warning")
         return
-    confirm = messagebox.askyesno("Confirmation",
-                                  f"Delete {len(selected_items)} song(s)?")
 
-    if confirm:
+    msg = CTkMessagebox(
+        title="Confirmation",
+        message=f"Delete {len(selected_items)} song(s)?",
+        icon="question",
+        option_1="No",
+        option_2="Yes",
+    )
+    response = msg.get()
+
+    if response == "Yes":
         converted_files = player.get_converted_files()
         for item in selected_items:
             tree.delete(item)
             file_name = songs[item][0]
             if file_name in converted_files.keys():
-                # do usunięcia
                 print("Remove:", file_name)
-                os.remove(file_name)
-                player.remove_converted_file_from_list(file_name)
+                try:
+                    os.remove(file_name)
+                    player.remove_converted_file_from_list(file_name)
+                except Exception() as e:
+                    print(str(e))
 
         files = utils.get_files_from_tree(tree, songs)
         lists.save_m3u(files, config.get_default_playlist_full_file_name())
@@ -369,8 +359,17 @@ def on_start():
 def on_stop():
     global is_playing
     global current_song
-    confirm = messagebox.askyesno("Confirmation", "Stop playing?")
-    if confirm:
+
+    msg = CTkMessagebox(
+        title="Confirmation",
+        message="Stop playing?",
+        icon="question",
+        option_1="No",
+        option_2="Yes",
+    )
+    response = msg.get()
+
+    if response == "Yes":
         player.fade()
         clear_playing()
         player.reset_progress()
@@ -378,8 +377,8 @@ def on_stop():
         if current_song in all_items:
             tree.selection_set(current_song)
         is_playing = False
-        #player.delete_tmp_files()
         global_vars.wave_canvas.delete("all")
+
 
 def make_drop(event):
     global current_song
@@ -400,15 +399,14 @@ def make_drop(event):
             i = i + 1
             po = (i) / fn
             progressbar.set(po)
-            root.update_idletasks()  # Odświeżamy GUI
-            root.after(100)  # Wstrzymujemy na 100 ms
+            root.update_idletasks()
+            root.after(100)
             root.update()
             tags = lists.get_all_tags(file)
             if tags["title"] is not None:
                 new_file = player.can_load_sound(file)
                 if new_file is not None:
                     iid = str(uuid.uuid4())
-                    #vol = player.get_loudness_from_file(new_file)
                     songs[iid] = (new_file, tags)
                     values = [tags.get(colum, "") for colum in columns]
 
@@ -480,13 +478,15 @@ def set_audio_device(event):
 
 
 oimage = None
+
+
 def resize(event):
     global oimage
     original_image = global_vars.canvas_image
     if original_image is not None:
         width = event.width
         height = event.height
-        img = original_image.resize((width,height))
+        img = original_image.resize((width, height))
         canvas = event.widget
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
             temp_filename = tmpfile.name
@@ -497,20 +497,16 @@ def resize(event):
         os.remove(temp_filename)
 
 
-
 class CTk(customtkinter.CTk, TkinterDnD.DnDWrapper):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.TkdndVersion = TkinterDnD._require(self)
 
 
-customtkinter.set_appearance_mode(
-    "system")  # Modes: system (default), light, dark
+customtkinter.set_appearance_mode("system")  # Modes: system (default), light, dark
 customtkinter.set_default_color_theme(
-    "blue")  # Themes: blue (default), dark-blue, green
-
-from tkinter import Menu
+    "blue"
+)  # Themes: blue (default), dark-blue, green
 
 
 def build_gui():
@@ -525,8 +521,6 @@ def build_gui():
     global next_button
     global audio_device_dropdown
 
-    # root = tk.Tk()
-    # root = customtkinter.CTk()
     root = CTk()
     root.protocol("WM_DELETE_WINDOW", on_closing)
     icon = PhotoImage(file="icon.png")
@@ -540,10 +534,10 @@ def build_gui():
         menu_bar.add_cascade(menu=app_menu)
     else:
         app_menu = tk.Menu(menu_bar, tearoff=0)
-        menu_bar.add_cascade(label='File',menu=app_menu)
+        menu_bar.add_cascade(label="File", menu=app_menu)
 
     app_menu.add_command(label="About Milonga", command=about)
-    app_menu.add_command(label="Export playlist",command=export_playlist)
+    app_menu.add_command(label="Export playlist", command=export_playlist)
     app_menu.add_separator()
     app_menu.add_command(label="Quit", command=root.quit)
 
@@ -551,23 +545,15 @@ def build_gui():
     toolbar = customtkinter.CTkFrame(root)
     toolbar.pack(side="top", fill="x")
 
-    slider = customtkinter.CTkSlider(master=root,
-                                     from_=0,
-                                     to=100,
-                                     command=set_volume)
+    slider = customtkinter.CTkSlider(master=root, from_=0, to=100, command=set_volume)
     slider.pack(side="top", fill="x", padx=10, pady=5)
 
-    global_vars.wave_canvas = customtkinter.CTkCanvas(master=root,
-                                                      width=800,
-                                                      height=50)
+    global_vars.wave_canvas = customtkinter.CTkCanvas(master=root, width=800, height=50)
     global_vars.wave_canvas.pack(side="top", fill="x", padx=10, pady=5)
     global_vars.wave_canvas.bind("<Configure>", resize)
 
     progressbar = customtkinter.CTkProgressBar(master=root)
     progressbar.pack(side="top", fill="x", padx=10, pady=5)
-
-    # status_bar = customtkinter.CTkLabel(root, text="", anchor="w", height=30)
-    # status_bar.pack(side="bottom", fill="x")
 
     panel = customtkinter.CTkFrame(root)
     panel.pack(side="bottom", fill="x", padx=10, pady=10)
@@ -575,67 +561,55 @@ def build_gui():
     status_bar = customtkinter.CTkLabel(panel, text="", anchor="w", height=30)
     status_bar.pack(side="left", fill="x", padx=0)
 
-    # Lista urządzeń audio
     device_list = player.get_devices()
-    # Dropdown z urządzeniami audio
     audio_device_dropdown = customtkinter.CTkOptionMenu(
-        panel, values=device_list, command=set_audio_device)
+        panel, values=device_list, command=set_audio_device
+    )
     audio_device_dropdown.pack(side="right", padx=0)
 
-    # Ikony do przycisków
     play_icon = utils.load_and_resize_image(file="play.png")
     stop_icon = utils.load_and_resize_image(file="stop.png")
     delete_icon = utils.load_and_resize_image(file="delete.png")
     pause_icon = utils.load_and_resize_image(file="pause.png")
     next_icon = utils.load_and_resize_image(file="next.png")
 
-    # Przycisk Start
-    start_button = customtkinter.CTkButton(toolbar,
-                                           image=play_icon,
-                                           command=on_start,
-                                           text="Start")
-    # start_button = ttk.Button(toolbar, image=play_icon, command=on_start, text="Start")
-    start_button.image = play_icon  # Zachowanie referencji do obrazu
+    start_button = customtkinter.CTkButton(
+        toolbar, image=play_icon, command=on_start, text="Start"
+    )
+    start_button.image = play_icon
     start_button.pack(side="left", padx=2, pady=2)
 
-    # Przycisk Stop
-    stop_button = customtkinter.CTkButton(toolbar,
-                                          image=stop_icon,
-                                          command=on_stop,
-                                          text="Stop")
-    stop_button.image = stop_icon  # Zachowanie referencji do obrazu
+    stop_button = customtkinter.CTkButton(
+        toolbar, image=stop_icon, command=on_stop, text="Stop"
+    )
+    stop_button.image = stop_icon
     stop_button.pack(side="left", padx=2, pady=2)
 
-    pause_button = customtkinter.CTkButton(toolbar,
-                                           image=pause_icon,
-                                           command=on_pause,
-                                           text="Pause")
-    pause_button.image = pause_icon  # Zachowanie referencji do obrazu
+    pause_button = customtkinter.CTkButton(
+        toolbar, image=pause_icon, command=on_pause, text="Pause"
+    )
+    pause_button.image = pause_icon
     pause_button.pack(side="left", padx=2, pady=2)
 
-    next_button = customtkinter.CTkButton(toolbar,
-                                          image=next_icon,
-                                          command=on_next,
-                                          text="Next")
-    next_button.image = next_icon  # Zachowanie referencji do obrazu
+    next_button = customtkinter.CTkButton(
+        toolbar, image=next_icon, command=on_next, text="Next"
+    )
+    next_button.image = next_icon
     next_button.pack(side="left", padx=2, pady=2)
 
-    # Przycisk Delete
-    delete_button = customtkinter.CTkButton(toolbar,
-                                            image=delete_icon,
-                                            command=on_delete,
-                                            text="Delete")
-    delete_button.image = delete_icon  # Zachowanie referencji do obrazu
+    delete_button = customtkinter.CTkButton(
+        toolbar, image=delete_icon, command=on_delete, text="Delete"
+    )
+    delete_button.image = delete_icon
     delete_button.pack(side="left", padx=2, pady=2)
-    # Ustawienia kolumn Treeview
     columns = settings["main_grid"]["fields"]
 
-    ###Treeview Customisation (theme colors are selected)
     bg_color = root._apply_appearance_mode(
-        customtkinter.ThemeManager.theme["CTkFrame"]["fg_color"])
+        customtkinter.ThemeManager.theme["CTkFrame"]["fg_color"]
+    )
     text_color = root._apply_appearance_mode(
-        customtkinter.ThemeManager.theme["CTkLabel"]["text_color"])
-    # selected_color = root._apply_appearance_mode(customtkinter.ThemeManager.theme["CTkButton"]["fg_color"])
+        customtkinter.ThemeManager.theme["CTkLabel"]["text_color"]
+    )
 
     treestyle = ttk.Style()
     treestyle.theme_use("default")
@@ -644,48 +618,42 @@ def build_gui():
         background=bg_color,
         foreground=text_color,
         fieldbackground=bg_color,
-        borderwidth=0,
-        font=("Arial", 14),
+        #borderwidth=1,
+        #relief = 'solid',
+        font=("Arial", 12),
     )
     treestyle.configure(
         "Treeview.Heading",
-        # background="#2c2f33",  # Tło nagłówka
-        foreground="white",  # Kolor tekstu nagłówka
-        # font=("Arial", 16, "bold"),  # Czcionka nagłówka
+        foreground="white",
         relief="flat",
-        font=("Arial", 14),
-    )  # Styl obramowania (płaskie)
+        font=("Arial", 12),
+    )
 
-    # treestyle.map('Treeview', background=[('selected', bg_color)], foreground=[('selected', selected_color)])
     root.bind("<<TreeviewSelect>>", lambda event: root.focus_set())
 
-    #tree = CTkTreeview(root,
-    tree = ttk.Treeview(root,
-                        columns=columns,
-                        selectmode="none",
-                        show="headings")
+    tree = ttk.Treeview(root, columns=columns, selectmode="none", show="headings")
 
     for i, header in enumerate(settings["main_grid"]["headers"]):
         tree.heading(i, text=header)
+        #tree.grid_columnconfigure(i, weight=1)
+        #ttk.Separator(master=tree, orient='vertical', style='black.TSeparator', takefocus=0).grid(row=1, column=i,
+        #                                                                                            ipady=200, pady=1,sticky='w'
+        #                                                                                           )
 
-    vsb = ttk.Scrollbar(root, command=tree.yview)
+    vsb = customtkinter.CTkScrollbar(root, command=tree.yview)
     tree.configure(yscrollcommand=vsb.set)
 
     vsb.pack(side="right", fill="y")
     tree.pack(side="left", fill="both", expand=True)
 
-    # Konfiguracja tagów
     tree.tag_configure("play", background="yellow", foreground="blue")
-
     tree.tag_configure("over", background="silver", foreground="white")
-
     tree.tag_configure("cortina", foreground="red")
     tree.tag_configure("vals", foreground="green")
     tree.tag_configure("milonga", foreground="yellow")
 
     tree.tag_configure("default", background="#ffffff")
 
-    # Obsługa zdarzeń myszy
     tree.bind("<ButtonPress-1>", bDown)
     tree.bind("<ButtonRelease-1>", bUp, add="+")
     tree.bind("<B1-Motion>", bMove, add="+")
@@ -705,8 +673,7 @@ def build_gui():
 def load_default_playlist(tree):
     songs = {}
     columns = settings["main_grid"]["fields"]
-    tags = lists.get_audio_tags_from_m3u8(
-        config.get_default_playlist_full_file_name())
+    tags = lists.get_audio_tags_from_m3u8(config.get_default_playlist_full_file_name())
     if tags is None:
         return songs
 
@@ -723,20 +690,26 @@ def load_default_playlist(tree):
 waiting_time = 0
 
 line = None
+
+
 def update_line():
     global line
     if line is not None:
-        global_vars.wave_canvas.delete(line)  # Usuń poprzednią kreskę
+        global_vars.wave_canvas.delete(line)
 
-    pos = player.get_pos()+player.get_start_pos()  # Pobierz aktualną pozycję
-    duration = player.get_duration()  # Pobierz całkowitą długość
+    pos = player.get_pos() + player.get_start_pos()
+    duration = player.get_duration()
 
     if duration > 0:
-        # Oblicz proporcję pozycji na szerokość Canvas
         x_pos = (pos / duration) * global_vars.wave_canvas.winfo_width()
-        line = global_vars.wave_canvas.create_line(x_pos, 0, x_pos, global_vars.wave_canvas.winfo_height(), fill="red", width=2)
+        line = global_vars.wave_canvas.create_line(
+            x_pos, 0, x_pos, global_vars.wave_canvas.winfo_height(), fill="red", width=2
+        )
+
 
 is_converting = False
+
+
 def update_loudness():
     global is_converting
     is_converting = True
@@ -746,39 +719,34 @@ def update_loudness():
         data = songs[id]
         if len(data) == 2:
             file = data[0]
-            print('Calculating loudness and silence: ', file)
+            print("Calculating loudness and silence: ", file)
             vol = player.get_loudness_from_file(file)
             new_data = list(data)
             new_data.append(vol)
-            start_cut, end_cut = player.detect_silence_start_end_from_file(file, 200, -56)
+            start_cut, end_cut = player.detect_silence_start_end_from_file(
+                file, 200, -56
+            )
             new_data.append(start_cut)
             new_data.append(end_cut)
             songs[id] = tuple(new_data)
     is_converting = False
 
+
 def check_music():
-
-
-
     global is_playing
     global current_song
     global waiting_time
 
     setup_buttons()
 
-    #update_loudness()
-
     def worker():
         update_loudness()
 
     if not is_converting:
-        thread = threading.Thread(target=worker,daemon=True)
+        thread = threading.Thread(target=worker, daemon=True)
         thread.start()
 
-
-
     if player.get_busy():
-        #progressbar.set(player.get_progress())
         update_line()
         title = songs[current_song][1]["title"]
         pos = player.get_pos()
@@ -790,20 +758,18 @@ def check_music():
                 minutes=pos // 60000,
                 seconds=(pos // 1000) % 60,
                 minutes_total=int(total // 60000),
-                seconds_total=int((total  // 1000) % 60),
-                correction = int(correction*100)
-            ))
-
+                seconds_total=int((total // 1000) % 60),
+                correction=int(correction * 100),
+            )
+        )
 
     else:
         status_bar.configure(text="")
-    # print(player.get_busy(),is_paused)
     if not (player.get_busy() or is_paused):
         if is_playing:
 
             waiting_time = waiting_time + dt
             if waiting_time < config.pause_time:
-                # print('Czekam...')
                 pass
             else:
                 waiting_time = 0
@@ -825,21 +791,16 @@ def check_music():
 
 player.init_player()
 root, tree = build_gui()
-
 root.after(dt, check_music)
-
 songs = load_default_playlist(tree)
 player.load_converted_files()
 clear_playing()
 progressbar.set(0)
-
 val = settings["volume"]
 slider.set(val)
 volume = float(val) / 100
 player.set_volume(volume)
-
 config.save_settings(settings)
-
 selected_device = audio_device_dropdown.get()
 player.set_device(selected_device)
 
@@ -847,4 +808,5 @@ if DEBUG:
     from utils import get_libraries
 
     get_libraries()
+
 root.mainloop()

@@ -53,7 +53,6 @@ def load_settings(settings_file=settings_file):
 
 def initilize():
     config_file = get_config_full_file_name()
-    ####Do celów testowych config zakłada się za każadym razem
     if DEBUG:
         if os.path.exists(config_file):
             os.remove(config_file)

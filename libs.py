@@ -1,1 +1,9 @@
-resources_dirs = ['.venv/lib/python3.9/site-packages/PIL/.dylibs', '.venv/lib/python3.9/site-packages/_soundfile_data', '.venv/lib/python3.9/site-packages/numpy/.dylibs', '.venv/lib/python3.9/site-packages/pygame/.dylibs', '.venv/lib/python3.9/site-packages/pymediainfo', '.venv/lib/python3.9/site-packages/scipy/.dylibs', '.venv/lib/python3.9/site-packages/tkinterdnd2/tkdnd/osx-x64']
+resources_dirs = [
+    ".venv/lib/python3.9/site-packages/PIL/.dylibs",
+    ".venv/lib/python3.9/site-packages/_soundfile_data",
+    ".venv/lib/python3.9/site-packages/numpy/.dylibs",
+    ".venv/lib/python3.9/site-packages/pygame/.dylibs",
+    ".venv/lib/python3.9/site-packages/pymediainfo",
+    ".venv/lib/python3.9/site-packages/scipy/.dylibs",
+    ".venv/lib/python3.9/site-packages/tkinterdnd2/tkdnd/osx-x64",
+]

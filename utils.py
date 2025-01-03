@@ -6,10 +6,6 @@ import itertools
 
 
 def db_to_float(db, using_amplitude=True):
-    """
-    Converts the input db to a float, which represents the equivalent
-    ratio in power.
-    """
     db = float(db)
     if using_amplitude:
         return 10 ** (db / 20)
@@ -96,9 +92,7 @@ def detect_silence_start_end(audio_segment, min_silence_len=1000, silence_thresh
 
 
 def convert_to_mp3_with_tags(input_file, output_file):
-
     ffmpeg_command = ['ffmpeg', '-i', input_file, output_file]
-
     subprocess.run(ffmpeg_command, check=True)
 
 
@@ -110,8 +104,8 @@ def get_files_from_tree(tree, songs):
 
 
 def load_and_resize_image(file, size=(32, 32)):
-    image = Image.open(file)  # Załaduj obraz
-    image_resized = image.resize(size)  # Przeskaluj obraz
+    image = Image.open(file)
+    image_resized = image.resize(size)
     return ImageTk.PhotoImage(image_resized)
 
 
@@ -119,19 +113,13 @@ import os
 
 
 def get_libraries():
-    # Uruchomienie lsof i filtrowanie bibliotek z /Users/pawel
     output = os.popen("lsof | grep dylib | grep '/Users/pawel'").read()
-
-    # Wyodrębnienie unikalnych katalogów
     directories = set()
     for line in output.splitlines():
         # Załóż, że ścieżka jest ostatnią kolumną
         path = line.split()[-1]
         directory = os.path.dirname(path)
         directories.add(directory)
-
-    # Wyświetlenie unikalnych katalogów
-    #print("Katalogi z bibliotekami dylib:")
     res = []
     for directory in sorted(directories):
         directory = os.path.relpath(directory, "")
