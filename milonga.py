@@ -1,8 +1,28 @@
 import os
+import sys
 
-current_directory = os.getcwd()
+current_directory = os.getcwd()#
 p = current_directory + "/ffmpeg/"
 os.environ["PATH"] += os.pathsep + p
+
+import subprocess
+from functools import wraps
+import platform
+
+if platform.system() == 'Windows':
+    __old_Popen = subprocess.Popen
+    @wraps(__old_Popen)
+    def new_Popen(*args, startupinfo=None, **kwargs):
+        if startupinfo is None:
+            startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        return __old_Popen(*args, startupinfo=startupinfo, **kwargs)
+
+    subprocess.Popen = new_Popen
+
+
 
 import global_vars
 import config
@@ -523,7 +543,7 @@ def build_gui():
 
     root = CTk()
     root.protocol("WM_DELETE_WINDOW", on_closing)
-    icon = PhotoImage(file="icon.png")
+    icon = PhotoImage(file="icons/icon.png")
     root.iconphoto(True, icon)
     root.title("Milonga")
 
@@ -567,11 +587,11 @@ def build_gui():
     )
     audio_device_dropdown.pack(side="right", padx=0)
 
-    play_icon = utils.load_and_resize_image(file="play.png")
-    stop_icon = utils.load_and_resize_image(file="stop.png")
-    delete_icon = utils.load_and_resize_image(file="delete.png")
-    pause_icon = utils.load_and_resize_image(file="pause.png")
-    next_icon = utils.load_and_resize_image(file="next.png")
+    play_icon = utils.load_and_resize_image(file="icons/play.png")
+    stop_icon = utils.load_and_resize_image(file="icons/stop.png")
+    delete_icon = utils.load_and_resize_image(file="icons/delete.png")
+    pause_icon = utils.load_and_resize_image(file="icons/pause.png")
+    next_icon = utils.load_and_resize_image(file="icons/next.png")
 
     start_button = customtkinter.CTkButton(
         toolbar, image=play_icon, command=on_start, text="Start"
