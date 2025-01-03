@@ -619,7 +619,7 @@ def build_gui():
         foreground=text_color,
         fieldbackground=bg_color,
         #borderwidth=1,
-        #relief = 'solid',
+        relief = 'flat',
         font=("Arial", 12),
     )
     treestyle.configure(
