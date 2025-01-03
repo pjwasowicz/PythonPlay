@@ -1,21 +1,37 @@
 from cx_Freeze import setup, Executable
 import platform
 
-includefiles = [
-    ('icons/delete.png', 'icons/delete.png'),
-    ('icons/icon.png', 'icons/icon.png'),
-    ('icons/next.png', 'icons/next.png'),
-    ('icons/pause.png', 'icons/pause.png'),
-    ('icons/play.png', 'icons/play.png'),
-    ('icons/stop.png', 'icons/stop.png'),
+includefiles = []
 
-    ('ffmpeg/ffmpeg.exe', 'ffmpeg/ffmpeg.exe'),
-    ('ffmpeg/ffprobe.exe', 'ffmpeg/ffprobe.exe'),
 
-    ('ffmpeg/ffmpeg', 'ffmpeg/ffmpeg'),
-    ('ffmpeg/ffprobe', 'ffmpeg/ffprobe'),
+if platform.system() == 'Windows':
 
-]
+    includefiles = [
+        ('icons/delete.png', 'icons/delete.png'),
+        ('icons/icon.png', 'icons/icon.png'),
+        ('icons/next.png', 'icons/next.png'),
+        ('icons/pause.png', 'icons/pause.png'),
+        ('icons/play.png', 'icons/play.png'),
+        ('icons/stop.png', 'icons/stop.png'),
+
+        ('ffmpeg/ffmpeg.exe', 'ffmpeg/ffmpeg.exe'),
+        ('ffmpeg/ffprobe.exe', 'ffmpeg/ffprobe.exe'),
+
+
+    ]
+else:
+    includefiles = [
+        ('icons/delete.png', 'icons/delete.png'),
+        ('icons/icon.png', 'icons/icon.png'),
+        ('icons/next.png', 'icons/next.png'),
+        ('icons/pause.png', 'icons/pause.png'),
+        ('icons/play.png', 'icons/play.png'),
+        ('icons/stop.png', 'icons/stop.png'),
+
+        ('ffmpeg/ffmpeg', 'ffmpeg/ffmpeg'),
+        ('ffmpeg/ffprobe', 'ffmpeg/ffprobe'),
+
+    ]
 
 
 includes = []
