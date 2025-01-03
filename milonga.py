@@ -635,10 +635,6 @@ def build_gui():
 
     for i, header in enumerate(settings["main_grid"]["headers"]):
         tree.heading(i, text=header)
-        #tree.grid_columnconfigure(i, weight=1)
-        #ttk.Separator(master=tree, orient='vertical', style='black.TSeparator', takefocus=0).grid(row=1, column=i,
-        #                                                                                            ipady=200, pady=1,sticky='w'
-        #                                                                                           )
 
     vsb = customtkinter.CTkScrollbar(root, command=tree.yview)
     tree.configure(yscrollcommand=vsb.set)

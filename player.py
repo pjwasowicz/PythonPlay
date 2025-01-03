@@ -14,15 +14,15 @@ import re
 import threading
 from io import BytesIO
 import global_vars
-
 import tkinter as tk
-
 import matplotlib
+import pygame._sdl2.audio as sdl2_audio
+import matplotlib.pyplot as plt
+from PIL import Image
 
 matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt
-from PIL import Image
+
 
 
 tmp_files = []
@@ -38,7 +38,7 @@ converted_files = {}
 
 current_volume = 0.0
 
-import pygame._sdl2.audio as sdl2_audio
+
 
 loudnes_table = {}
 
