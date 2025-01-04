@@ -1,16 +1,13 @@
 import os
 import sys
-os.environ['LANG'] = 'pl_PL.UTF-8'
 
 user_home = os.path.expanduser('~')
 file_path = os.path.join(user_home, 'milonga.log')
 
-# Otworzenie pliku w trybie zapisu
 f =open(file_path, 'w')
 sys.stdout = f
 
-# Przywrócenie domyślnego stdout (do konsoli)
-#sys.stdout = sys.__stdout__
+
 
 the_path = os.path.dirname(os.path.abspath(__file__))
 path_to_remove = os.path.join("lib", "library.zip")
