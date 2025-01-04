@@ -4,8 +4,8 @@ import sys
 user_home = os.path.expanduser('~')
 file_path = os.path.join(user_home, 'milonga.log')
 
-f =open(file_path, 'w')
-sys.stdout = f
+#f =open(file_path, 'w')
+#sys.stdout = f
 
 
 
@@ -484,13 +484,14 @@ def drop_position(event):
 
 def drop(event):
     global current_line
-
+    make_drop(event)
+    """
     def worker():
         make_drop(event)
 
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
-
+    """
 
 settings = config.load_settings()
 
