@@ -69,9 +69,10 @@ plist_items = [
 setup(
     name="Milonga",
     version="1.0",
-    description="Milonga",
+    description = 'Milonga DJ App',
+    author = 'Paweł Wąsowicz',
     options = {'bdist_dmg':{'show_icon_preview':True},
                'bdist_mac':{'plist_items':plist_items, "iconfile":"icon.icns"},
                'build_exe': {'includes':includes,'excludes':excludes,'packages':packages,'include_files':includefiles}},
-    executables=[Executable("milonga.py", base=base)],
+    executables=[Executable("milonga.py", base=base, target_name='Milonga')],
 )
