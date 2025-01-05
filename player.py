@@ -20,8 +20,8 @@ import pygame._sdl2.audio as sdl2_audio
 import matplotlib.pyplot as plt
 from PIL import Image
 
-matplotlib.use("Agg")
 
+matplotlib.use("Agg")
 
 
 
@@ -245,11 +245,9 @@ def make_wave(pcm_data, sample_rate):
     buf.close()
     plt.clf()
     plt.close()
-    oimage = tk.PhotoImage(file=temp_filename)
+    global_vars.wave_queue.put(temp_filename)
 
-    global_vars.image_id = global_canvas.create_image(0, 0, anchor="nw", image=oimage)
 
-    os.remove(temp_filename)
 
 
 def get_loudness_from_file(file):

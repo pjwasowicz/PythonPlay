@@ -58,7 +58,7 @@ import player
 import tempfile
 from config import DEBUG
 import customtkinter
-from CTkMessagebox import CTkMessagebox
+from custom_message_box import custom_messagebox_panel
 
 customtkinter.set_appearance_mode("light")
 customtkinter.set_default_color_theme("blue")
@@ -85,7 +85,8 @@ audio_device_dropdown = None
 
 
 def about():
-    CTkMessagebox(title="Info", message="Milonga DJ Soft - Paweł Wąsowicz")
+    #CTkMessagebox(title="Info", message="Milonga DJ Soft - Paweł Wąsowicz",master=root)
+    custom_messagebox_panel(parent=tree, message="Milonga DJ Soft - Paweł Wąsowicz")
 
 
 def export_playlist():
@@ -101,11 +102,8 @@ def export_playlist():
 def on_closing():
     global is_playing
     if is_playing:
-        CTkMessagebox(
-            title="Warning",
-            message="Cannot close application while is playing.",
-            icon="warning",
-        )
+        custom_messagebox_panel(parent=tree, message="Cannot close application while is playing.")
+
     else:
         player.quit_device()
         player.delete_tmp_files()
@@ -340,19 +338,12 @@ def on_delete():
     selected_items = tree.selection()
 
     if not selected_items:
-        CTkMessagebox(title="None selected", message="Select rows.", icon="warning")
+        custom_messagebox_panel(parent=tree, message="Select rows.")
         return
 
-    msg = CTkMessagebox(
-        title="Confirmation",
-        message=f"Delete {len(selected_items)} song(s)?",
-        icon="question",
-        option_1="No",
-        option_2="Yes",
-    )
-    response = msg.get()
+    res= custom_messagebox_panel(parent=tree, message=f"Delete {len(selected_items)} song(s)?",show_cancel=True)
 
-    if response == "Yes":
+    if res:
         converted_files = player.get_converted_files()
         for item in selected_items:
             tree.delete(item)
@@ -395,17 +386,10 @@ def on_start():
 def on_stop():
     global is_playing
     global current_song
+    res = custom_messagebox_panel(parent=tree, message="Stop playing?", show_cancel=True)
 
-    msg = CTkMessagebox(
-        title="Confirmation",
-        message="Stop playing?",
-        icon="question",
-        option_1="No",
-        option_2="Yes",
-    )
-    response = msg.get()
 
-    if response == "Yes":
+    if res:
         player.fade()
         clear_playing()
         player.reset_progress()
@@ -459,8 +443,9 @@ def make_drop(event):
                 else:
                     print("Wrong file: ", new_file)
 
-                if len(tree.get_children()) != len(selections):
-                    tree.selection_set(selections)
+                #if len(tree.get_children()) != len(selections):
+                #    tree.selection_set(selections)
+
         progressbar.set(start_pos)
 
     files = utils.get_files_from_tree(tree, songs)
@@ -559,6 +544,7 @@ def build_gui():
     global audio_device_dropdown
 
     root = CTk()
+
     root.protocol("WM_DELETE_WINDOW", on_closing)
     icon = PhotoImage(file="./icons/icon.png")
     root.iconphoto(True, icon)
@@ -764,6 +750,13 @@ def update_loudness():
             songs[id] = tuple(new_data)
     is_converting = False
 
+oimage = None
+def draw_wave(temp_filename):
+    global oimage
+    global_canvas = global_vars.wave_canvas
+    oimage = tk.PhotoImage(file=temp_filename)
+    global_vars.image_id = global_canvas.create_image(0, 0, anchor="nw", image=oimage)
+    os.remove(temp_filename)
 
 def check_music():
     global is_playing
@@ -771,6 +764,10 @@ def check_music():
     global waiting_time
 
     setup_buttons()
+
+    if global_vars.wave_queue.qsize()>0:
+        file_name = global_vars.wave_queue.get(block=False)
+        draw_wave(file_name)
 
     def worker():
         update_loudness()
