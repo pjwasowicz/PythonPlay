@@ -9,4 +9,3 @@ customtkinter
 mutagen
 pydub
 matplotlib
-CTKMessagebox
