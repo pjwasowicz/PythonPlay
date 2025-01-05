@@ -9,3 +9,4 @@ customtkinter
 mutagen
 pydub
 matplotlib
+cx-Freeze
