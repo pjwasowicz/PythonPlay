@@ -4,36 +4,19 @@ import platform
 includefiles = []
 
 
-if platform.system() == 'Windows':
 
-    includefiles = [
-        ('icons/delete.png', 'icons/delete.png'),
-        ('icons/icon.png', 'icons/icon.png'),
-        ('icons/next.png', 'icons/next.png'),
-        ('icons/pause.png', 'icons/pause.png'),
-        ('icons/play.png', 'icons/play.png'),
-        ('icons/stop.png', 'icons/stop.png'),
+includefiles = [
+    ('icons/delete.png', 'icons/delete.png'),
+    ('icons/icon.png', 'icons/icon.png'),
+    ('icons/next.png', 'icons/next.png'),
+    ('icons/pause.png', 'icons/pause.png'),
+    ('icons/play.png', 'icons/play.png'),
+    ('icons/stop.png', 'icons/stop.png'),
+    ('icon.icns', 'icon.icns'),
+    ('ffmpeg/ffmpeg', 'ffmpeg/ffmpeg'),
+    ('ffmpeg/ffprobe', 'ffmpeg/ffprobe'),
 
-        ('ffmpeg/ffmpeg.exe', 'ffmpeg/ffmpeg.exe'),
-        ('ffmpeg/ffprobe.exe', 'ffmpeg/ffprobe.exe'),
-
-
-    ]
-else:
-    includefiles = [
-        ('icons/delete.png', 'icons/delete.png'),
-        ('icons/icon.png', 'icons/icon.png'),
-        ('icons/next.png', 'icons/next.png'),
-        ('icons/pause.png', 'icons/pause.png'),
-        ('icons/play.png', 'icons/play.png'),
-        ('icons/stop.png', 'icons/stop.png'),
-
-        ('icon.icns', 'icon.icns'),
-
-        ('ffmpeg/ffmpeg', 'ffmpeg/ffmpeg'),
-        ('ffmpeg/ffprobe', 'ffmpeg/ffprobe'),
-
-    ]
+]
 
 
 includes = []
@@ -43,21 +26,9 @@ packages = []
 base = ""
 
 """
-<key>LSEnvironment</key>
-<dict>
-    <key>LANG</key>
-    <string>pl_PL.UTF-8</string>
-    <key>LC_ALL</key>
-    <string>pl_PL.UTF-8</string>
-</dict>
-
 python setup.py bdist_mac
 bdist_dmg
 """
-
-
-if platform.system() == 'Windows':
-    base = 'Win32GUI'
 
 plist_items = [
     ('LSEnvironment', {
