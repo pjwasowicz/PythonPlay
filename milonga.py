@@ -781,15 +781,15 @@ def check_music():
         title = songs[current_song][1]["title"]
         pos = player.get_pos()
         total = player.get_duration()
-        correction = player.get_loudness_corretion()
+        correction = player.get_loudness_corretion_db()
         status_bar.configure(
-            text="   {title}  [{minutes}:{seconds:02}] of [{minutes_total:00}:{seconds_total:02}]  [vol: {correction}%]".format(
+            text="   {title}  [{minutes}:{seconds:02}] of [{minutes_total:00}:{seconds_total:02}]  [vol: {correction:.1f} dB]".format(
                 title=title,
                 minutes=pos // 60000,
                 seconds=(pos // 1000) % 60,
                 minutes_total=int(total // 60000),
                 seconds_total=int((total // 1000) % 60),
-                correction=int(correction * 100),
+                correction=correction,
             )
         )
 

@@ -19,6 +19,7 @@ import matplotlib
 import pygame._sdl2.audio as sdl2_audio
 import matplotlib.pyplot as plt
 from PIL import Image
+import math
 
 
 matplotlib.use("Agg")
@@ -149,6 +150,11 @@ def reset_progress():
 
 def get_loudness_corretion():
     return loudnes_correction
+
+
+def get_loudness_corretion_db():
+    db = 20 * math.log10(loudnes_correction)
+    return db
 
 
 def get_progress():
