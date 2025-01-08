@@ -3,6 +3,7 @@ import sys
 
 user_home = os.path.expanduser('~')
 file_path = os.path.join(user_home, 'milonga.log')
+from tkinter import font
 
 #f =open(file_path, 'w')
 #sys.stdout = f
@@ -427,8 +428,10 @@ def make_drop(event):
                 new_file = player.can_load_sound(file)
                 if new_file is not None:
                     iid = str(uuid.uuid4())
+
                     songs[iid] = (new_file, tags)
-                    values = [tags.get(colum, "") for colum in columns]
+
+
 
                     index = tree.index(currnet_item)
 
@@ -436,7 +439,18 @@ def make_drop(event):
                         n = len(tree.get_children())
                         index = n
 
+                    values=[]
+                    for column in columns:
+
+                        keys = re.findall(r'\{(.*?)\}', column)
+                        formatted_values = {}
+                        for key in keys:
+                            formatted_values[key] = tags.get(key, '')
+                        formatted_string = column.format(**formatted_values)
+                        values.append(formatted_string)
                     tree.insert("", index, iid=iid, values=values)
+
+
                     currnet_item = iid
                     selections.append(iid)
                     print("File added: ", new_file)
@@ -545,6 +559,8 @@ def build_gui():
 
     root = CTk()
 
+    root.geometry("430x800")
+
     root.protocol("WM_DELETE_WINDOW", on_closing)
     icon = PhotoImage(file="./icons/icon.png")
     root.iconphoto(True, icon)
@@ -565,8 +581,12 @@ def build_gui():
     app_menu.add_command(label="Quit", command=root.quit)
 
     root.config(menu=menu_bar)
+
     toolbar = customtkinter.CTkFrame(root)
-    toolbar.pack(side="top", fill="x")
+    toolbar.pack(side="top", fill="both")
+
+    toolbar_down = customtkinter.CTkFrame(root)
+    toolbar_down.pack(side="top", fill="both")
 
     slider = customtkinter.CTkSlider(master=root, from_=0, to=100, command=set_volume)
     slider.pack(side="top", fill="x", padx=10, pady=5)
@@ -615,14 +635,19 @@ def build_gui():
     pause_button.pack(side="left", padx=2, pady=2)
 
     next_button = customtkinter.CTkButton(
-        toolbar, image=next_icon, command=on_next, text="Next"
+        toolbar_down, image=next_icon, command=on_next, text="Next"
     )
+
     next_button.image = next_icon
     next_button.pack(side="left", padx=2, pady=2)
 
     delete_button = customtkinter.CTkButton(
-        toolbar, image=delete_icon, command=on_delete, text="Delete"
+        toolbar_down, image=delete_icon, command=on_delete, text="Delete"
     )
+
+
+
+
     delete_button.image = delete_icon
     delete_button.pack(side="left", padx=2, pady=2)
     columns = settings["main_grid"]["fields"]
@@ -636,6 +661,14 @@ def build_gui():
 
     treestyle = ttk.Style()
     treestyle.theme_use("default")
+
+    font_size = 12
+    font_name = "Arial"
+    num_lines = 4
+
+    my_font = font.Font(family=font_name, size=font_size)
+    font_height = my_font.metrics("linespace")+1
+
     treestyle.configure(
         "Treeview",
         background=bg_color,
@@ -643,18 +676,23 @@ def build_gui():
         fieldbackground=bg_color,
         #borderwidth=1,
         relief = 'flat',
-        font=("Arial", 12),
+        font=(font_name, font_size),
+        rowheight=font_height*num_lines
     )
+
     treestyle.configure(
         "Treeview.Heading",
         foreground="white",
         relief="flat",
-        font=("Arial", 12),
+        font=(font_name, font_size),
     )
+
+
 
     root.bind("<<TreeviewSelect>>", lambda event: root.focus_set())
 
     tree = ttk.Treeview(root, columns=columns, selectmode="none", show="headings")
+    tree.column(columns[-1], width=20)
 
     for i, header in enumerate(settings["main_grid"]["headers"]):
         tree.heading(i, text=header)
@@ -687,22 +725,39 @@ def build_gui():
     tree.dnd_bind("<<DropPosition>>", drop_position)
 
     return root, tree
+def adjust_row_height():
+    pass
+
+def udate_row_values():
+    pass
 
 
 def load_default_playlist(tree):
     songs = {}
     columns = settings["main_grid"]["fields"]
+
     tags = lists.get_audio_tags_from_m3u8(config.get_default_playlist_full_file_name())
     if tags is None:
         return songs
 
     for entry in tags:
         for file_path, file_tags in entry.items():
-            values = [file_tags.get(colum_name, "") for colum_name in columns]
+            values = []
+            for column in columns:
+
+                keys = re.findall(r'\{(.*?)\}', column)
+                formatted_values = {}
+                for key in keys:
+                    formatted_values[key] = file_tags.get(key, '')
+                formatted_string = column.format(**formatted_values)
+                values.append(formatted_string)
+
         iid = str(uuid.uuid4())
         tree.insert("", "end", iid=iid, values=values)
 
         songs[iid] = (file_path, file_tags)
+
+    adjust_row_height()
     return songs
 
 
@@ -783,7 +838,7 @@ def check_music():
         total = player.get_duration()
         correction = player.get_loudness_corretion_db()
         status_bar.configure(
-            text="   {title}  [{minutes}:{seconds:02}] of [{minutes_total:00}:{seconds_total:02}]  [vol: {correction:.1f} dB]".format(
+            text="   {title}  [{minutes}:{seconds:02}] of [{minutes_total:00}:{seconds_total:02}]  [{correction:.1f} dB]".format(
                 title=title,
                 minutes=pos // 60000,
                 seconds=(pos // 1000) % 60,

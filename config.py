@@ -53,6 +53,22 @@ def load_settings(settings_file=settings_file):
 
 def initilize():
     config_file = get_config_full_file_name()
+
+    if os.path.exists(config_file):
+        c = load_settings(config_file)
+        all_contains_brace = all('{' in field for field in c["main_grid"]["fields"])
+        if not all_contains_brace:
+            print("Updating config to new version")
+            settings = dict(
+                main_grid=dict(
+                    headers=["Name", "Comment"],
+                    fields=["{title}\n{album_performer}\n{performer}\n{album}", "{comment}"],
+                ),
+                volume=80,
+            )
+            save_settings(settings)
+
+
     if DEBUG:
         if os.path.exists(config_file):
             os.remove(config_file)
