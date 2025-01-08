@@ -1,5 +1,5 @@
 from cx_Freeze import setup, Executable
-import platform
+import config
 
 includefiles = []
 
@@ -28,7 +28,7 @@ base = ""
 """
 python setup.py bdist_mac
 bdist_dmg
-codesign --deep --force --verify --verbose --sign "Milonga" milonga-1.0.app 
+codesign --deep --force --verify --verbose --sign "Milonga" build/milonga-1.1.app 
 """
 
 plist_items = [
@@ -40,7 +40,7 @@ plist_items = [
 
 setup(
     name="Milonga",
-    version="1.0",
+    version=config.get_version(),
     description = 'Milonga DJ App',
     author = 'Paweł Wąsowicz',
     options = {'bdist_dmg':{'show_icon_preview':True},

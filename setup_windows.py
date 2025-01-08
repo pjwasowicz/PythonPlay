@@ -1,5 +1,6 @@
 import sys
 from cx_Freeze import setup, Executable
+import config
 
 includefiles = [
     ('icons/delete.png', 'icons/delete.png'),
@@ -65,7 +66,7 @@ bdist_msi_options = {
 # Konfiguracja `setup`
 setup(
     name="Milonga",
-    version="1.0",
+    version=config.get_version(),
     description='Milonga DJ App',
     author='Paweł Wąsowicz',
     options={
