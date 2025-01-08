@@ -87,12 +87,13 @@ audio_device_dropdown = None
 
 def about():
     #CTkMessagebox(title="Info", message="Milonga DJ Soft - Paweł Wąsowicz",master=root)
-    custom_messagebox_panel(parent=tree, message="Milonga DJ Soft - Paweł Wąsowicz")
+    custom_messagebox_panel(parent=tree,
+                            message="Milonga DJ Soft - Paweł Wąsowicz\nVersion: {version}".format(version=config.get_version()))
 
 
 def export_playlist():
     file_path = filedialog.asksaveasfilename(
-        title="Export to m3u8 file", filetypes=[("Playlist file:", "*.m3u")]
+        title="Export to m3u file", filetypes=[("Playlist file:", "*.m3u")]
     )
 
     if file_path:
@@ -664,7 +665,7 @@ def build_gui():
 
     font_size = 12
     font_name = "Arial"
-    num_lines = 4
+    num_lines = config.get_rows_count_for_grid()
 
     my_font = font.Font(family=font_name, size=font_size)
     font_height = my_font.metrics("linespace")+1
@@ -677,7 +678,7 @@ def build_gui():
         #borderwidth=1,
         relief = 'flat',
         font=(font_name, font_size),
-        rowheight=font_height*num_lines
+        rowheight=font_height*num_lines+5
     )
 
     treestyle.configure(
@@ -707,7 +708,7 @@ def build_gui():
     tree.tag_configure("over", background="silver", foreground="white")
     tree.tag_configure("cortina", foreground="red")
     tree.tag_configure("vals", foreground="green")
-    tree.tag_configure("milonga", foreground="yellow")
+    tree.tag_configure("milonga", foreground="orange")
 
     tree.tag_configure("default", background="#ffffff")
 
