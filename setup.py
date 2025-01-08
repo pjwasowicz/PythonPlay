@@ -28,6 +28,7 @@ base = ""
 """
 python setup.py bdist_mac
 bdist_dmg
+codesign --deep --force --verify --verbose --sign "Milonga" milonga-1.0.app 
 """
 
 plist_items = [
