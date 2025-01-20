@@ -10,3 +10,4 @@ mutagen
 pydub
 matplotlib
 cx-Freeze
+logging

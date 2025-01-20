@@ -1,12 +1,7 @@
+import logs
 import os
-import sys
-
-user_home = os.path.expanduser('~')
-file_path = os.path.join(user_home, 'milonga.log')
 from tkinter import font
 
-#f =open(file_path, 'w')
-#sys.stdout = f
 
 
 
@@ -83,6 +78,7 @@ pause_button = None
 next_button = None
 
 audio_device_dropdown = None
+formatted_text = ""
 
 
 def about():
@@ -545,6 +541,10 @@ customtkinter.set_default_color_theme(
     "blue"
 )  # Themes: blue (default), dark-blue, green
 
+def update_device_list(event):
+    device_list = player.get_devices()  # Pobierz listę urządzeń
+    audio_device_dropdown.configure(values=device_list)
+
 
 def build_gui():
     global slider
@@ -607,9 +607,11 @@ def build_gui():
 
     device_list = player.get_devices()
     audio_device_dropdown = customtkinter.CTkOptionMenu(
-        panel, values=device_list, command=set_audio_device
+        panel, values=device_list, command=set_audio_device,width=150
     )
     audio_device_dropdown.pack(side="right", padx=0)
+
+    audio_device_dropdown.bind("<Button-1>", update_device_list)
 
     play_icon = utils.load_and_resize_image(file="./icons/play.png")
     stop_icon = utils.load_and_resize_image(file="./icons/stop.png")
@@ -645,9 +647,6 @@ def build_gui():
     delete_button = customtkinter.CTkButton(
         toolbar_down, image=delete_icon, command=on_delete, text="Delete"
     )
-
-
-
 
     delete_button.image = delete_icon
     delete_button.pack(side="left", padx=2, pady=2)
@@ -814,6 +813,21 @@ def draw_wave(temp_filename):
     global_vars.image_id = global_canvas.create_image(0, 0, anchor="nw", image=oimage)
     os.remove(temp_filename)
 
+
+def animate_text():
+    global formatted_text
+    if len(formatted_text) == 0:
+        return
+    formatted_text = formatted_text[1:] + formatted_text[0]
+    status_bar.configure(text=formatted_text)
+    status_bar.after(100, animate_text)
+
+# Uruchomienie animacji
+
+
+
+
+
 def check_music():
     global is_playing
     global current_song
@@ -832,14 +846,21 @@ def check_music():
         thread = threading.Thread(target=worker, daemon=True)
         thread.start()
 
+
+
     if player.get_busy():
         update_line()
         title = songs[current_song][1]["title"]
         pos = player.get_pos()
         total = player.get_duration()
         correction = player.get_loudness_corretion_db()
+
+        max_length = 20
+        if len(title) > max_length:
+            title = title[:max_length - 3] + "..."
+
         status_bar.configure(
-            text="   {title}  [{minutes}:{seconds:02}] of [{minutes_total:00}:{seconds_total:02}]  [{correction:.1f} dB]".format(
+            text="{title}  [{minutes}:{seconds:02}] of [{minutes_total:00}:{seconds_total:02}]  [{correction:.1f} dB]".format(
                 title=title,
                 minutes=pos // 60000,
                 seconds=(pos // 1000) % 60,
@@ -887,12 +908,11 @@ slider.set(val)
 volume = float(val) / 100
 player.set_volume(volume)
 config.save_settings(settings)
+
 selected_device = audio_device_dropdown.get()
 player.set_device(selected_device)
 
-if DEBUG:
-    from utils import get_libraries
 
-    get_libraries()
+animate_text()
 
 root.mainloop()
