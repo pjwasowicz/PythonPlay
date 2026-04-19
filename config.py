@@ -19,7 +19,7 @@ app_support_name = "Application Support"
 settings_file = "milonga.plist"
 
 current_initial_settings = dict(
-                version = "1.1",
+                version = "1.101",
                 main_grid=dict(
                     headers=["Song", ""],
                     fields=["{title}\n{album_performer}/{performer}\n{album}",

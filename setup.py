@@ -18,8 +18,11 @@ includefiles = [
 
 ]
 
+includes = [
+    "scipy.signal._delegators",
+]
 
-includes = []
+
 excludes = []
 packages = []
 

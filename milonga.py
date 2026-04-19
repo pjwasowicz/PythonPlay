@@ -814,15 +814,8 @@ def draw_wave(temp_filename):
     os.remove(temp_filename)
 
 
-def animate_text():
-    global formatted_text
-    if len(formatted_text) == 0:
-        return
-    formatted_text = formatted_text[1:] + formatted_text[0]
-    status_bar.configure(text=formatted_text)
-    status_bar.after(100, animate_text)
 
-# Uruchomienie animacji
+
 
 
 
@@ -911,8 +904,5 @@ config.save_settings(settings)
 
 selected_device = audio_device_dropdown.get()
 player.set_device(selected_device)
-
-
-animate_text()
 
 root.mainloop()
