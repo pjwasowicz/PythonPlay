@@ -10,7 +10,7 @@ def save_m3u(files, output_path, save_external=False):
 
             if save_external:
                 if fname in converted_files.keys():
-                    fname = converted_files[file]
+                    fname = converted_files[fname]
 
             f.write(f"{fname}\n")
 

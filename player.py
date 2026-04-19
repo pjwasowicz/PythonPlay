@@ -47,14 +47,18 @@ loudnes_table = {}
 def delete_tmp_files():
     global tmp_files
     for file in tmp_files:
-        os.remove(file)
-        print("Deleted file:", file)
+        try:
+            if os.path.exists(file):
+                os.remove(file)
+                print("Deleted file:", file)
+        except OSError as e:
+            print("Cannot delete tmp file:", file, e)
     tmp_files = []
 
 
 def remove_converted_file_from_list(name):
     global converted_files
-    del converted_files[name]
+    converted_files.pop(name, None)
 
 
 def load_converted_files():
@@ -101,6 +105,7 @@ def quit_device():
 def set_device(selected_device):
     pygame.mixer.quit()
     pygame.mixer.init(devicename=selected_device)
+    pygame.mixer.music.set_volume(current_volume)
     print("Device set:", selected_device)
 
 

@@ -29,6 +29,20 @@ current_initial_settings = dict(
             )
 
 
+def merge_settings(defaults, current):
+    merged = defaults.copy()
+    for key, value in current.items():
+        if (
+            key in merged
+            and isinstance(merged[key], dict)
+            and isinstance(value, dict)
+        ):
+            merged[key] = merge_settings(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def get_rows_count_for_grid():
     settings = load_settings()
     column = settings['main_grid']['fields'][0]
@@ -94,6 +108,6 @@ def initilize():
 
     if v_new != v:
         print("New version")
-        save_settings(current_initial_settings)
+        save_settings(merge_settings(current_initial_settings, settings))
 
 initilize()
