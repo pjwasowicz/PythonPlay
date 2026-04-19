@@ -266,13 +266,14 @@ class MilongaApp:
 
         window = tk.Toplevel(self.ui.root)
         window.title("Settings")
-        window.geometry("460x220")
+        window.geometry("1280x620")
         window.resizable(False, False)
         window.transient(self.ui.root)
         self.ui.audio_settings_window = window
 
         frame = tk.Frame(window, padx=16, pady=16)
         frame.pack(fill="both", expand=True)
+        frame.grid_columnconfigure(1, weight=1)
 
         tk.Label(frame, text="Color theme").grid(row=0, column=0, sticky="w")
         theme_var = tk.StringVar(value=self.get_color_theme())
@@ -285,8 +286,8 @@ class MilongaApp:
         theme_dropdown.grid(row=0, column=1, sticky="ew", padx=(12, 0))
 
         tk.Label(frame, text="Output device").grid(row=1, column=0, sticky="w", pady=(14, 0))
-        device_values = list(self.get_devices())
         self.ensure_audio_settings()
+        device_values = list(self.get_devices())
         device_var = tk.StringVar(value=self.state.settings.get("audio_device", ""))
         device_dropdown = customtkinter.CTkOptionMenu(
             frame,
@@ -308,15 +309,120 @@ class MilongaApp:
         if not self.supports_hog_mode():
             hog_switch.configure(state="disabled")
 
-        button_row = tk.Frame(frame)
-        button_row.grid(row=3, column=0, columnspan=2, sticky="e", pady=(20, 0))
+        tk.Label(frame, text="Genre EQ", font=("Arial", 13, "bold")).grid(
+            row=3, column=0, columnspan=3, sticky="w", pady=(22, 8)
+        )
 
-        def refresh_devices():
-            values = list(self.get_devices())
-            device_dropdown.configure(values=values if values else [""])
-            self.ensure_audio_settings()
-            if device_var.get() not in values:
-                device_var.set(self.state.settings.get("audio_device", ""))
+        equalizer_settings = self.state.settings.get("genre_equalizer", {})
+        genre_names = list(equalizer_settings.keys())
+        selected_genre_var = tk.StringVar(value=genre_names[0] if genre_names else "default")
+        tk.Label(frame, text="Preset genre").grid(row=4, column=0, sticky="w")
+        genre_dropdown = customtkinter.CTkOptionMenu(
+            frame,
+            values=genre_names if genre_names else ["default"],
+            variable=selected_genre_var,
+            width=240,
+        )
+        genre_dropdown.grid(row=4, column=1, sticky="ew", padx=(12, 0))
+
+        eq_enabled_var = tk.BooleanVar(value=False)
+        eq_enabled_switch = customtkinter.CTkSwitch(
+            frame,
+            text="Enable equalizer for this genre",
+            variable=eq_enabled_var,
+            onvalue=True,
+            offvalue=False,
+        )
+        eq_enabled_switch.grid(row=5, column=0, columnspan=3, sticky="w", pady=(14, 0))
+
+        band_frame = tk.Frame(frame)
+        band_frame.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(12, 0))
+
+        eq_band_vars = {}
+        eq_band_labels = {}
+        band_order = ["25", "40", "63", "100", "160", "250", "400", "630", "1000", "1600", "2500", "4000", "6300", "10000", "16000"]
+        band_display = {
+            "25": "25",
+            "40": "40",
+            "63": "63",
+            "100": "100",
+            "160": "160",
+            "250": "250",
+            "400": "400",
+            "630": "630",
+            "1000": "1k",
+            "1600": "1.6k",
+            "2500": "2.5k",
+            "4000": "4k",
+            "6300": "6.3k",
+            "10000": "10k",
+            "16000": "16k",
+        }
+        for index, frequency in enumerate(band_order):
+            column = tk.Frame(band_frame, padx=4)
+            column.pack(side="left", fill="y", expand=True)
+            tk.Label(column, text=band_display[frequency]).pack()
+            value_label = tk.Label(column, text="0 dB")
+            value_label.pack(pady=(4, 8))
+            band_var = tk.DoubleVar(value=0.0)
+            slider = customtkinter.CTkSlider(
+                column,
+                from_=-12,
+                to=12,
+                number_of_steps=24,
+                variable=band_var,
+                orientation="vertical",
+                height=160,
+            )
+            slider.pack()
+            eq_band_vars[frequency] = band_var
+            eq_band_labels[frequency] = value_label
+
+        button_row = tk.Frame(frame)
+        button_row.grid(row=7, column=0, columnspan=3, sticky="e", pady=(48, 12))
+
+        staged_equalizers = {}
+        for genre_name, eq_settings in equalizer_settings.items():
+            staged_equalizers[genre_name] = {
+                "enabled": bool(eq_settings.get("enabled", False)),
+                "bands": {band: float(eq_settings.get("bands", {}).get(band, 0)) for band in band_order},
+            }
+
+        current_eq_genre = {"name": selected_genre_var.get()}
+
+        def update_band_labels():
+            for frequency, value_label in eq_band_labels.items():
+                value_label.configure(text=f"{int(round(eq_band_vars[frequency].get()))} dB")
+
+        def store_current_eq_preset():
+            genre_name = current_eq_genre["name"]
+            if genre_name not in staged_equalizers:
+                return
+            staged_equalizers[genre_name] = {
+                "enabled": bool(eq_enabled_var.get()),
+                "bands": {frequency: int(round(eq_band_vars[frequency].get())) for frequency in band_order},
+            }
+
+        def load_eq_preset(genre_name):
+            preset = staged_equalizers.get(
+                genre_name,
+                {"enabled": False, "bands": {band: 0 for band in band_order}},
+            )
+            eq_enabled_var.set(bool(preset.get("enabled", False)))
+            for frequency in band_order:
+                eq_band_vars[frequency].set(float(preset.get("bands", {}).get(frequency, 0)))
+            update_band_labels()
+            current_eq_genre["name"] = genre_name
+
+        def on_eq_genre_change(selected_genre):
+            store_current_eq_preset()
+            load_eq_preset(selected_genre)
+
+        genre_dropdown.configure(command=on_eq_genre_change)
+        load_eq_preset(selected_genre_var.get())
+
+        for frequency, band_var in eq_band_vars.items():
+            band_var.trace_add("write", lambda *args: update_band_labels())
 
         def close_window():
             self.ui.audio_settings_window = None
@@ -327,22 +433,17 @@ class MilongaApp:
             selected_device = device_var.get().strip()
             selected_theme = theme_var.get().strip()
             theme_changed = selected_theme != self.get_color_theme()
+            store_current_eq_preset()
+
             self.state.settings["color_theme"] = selected_theme
             self.state.settings["audio_device"] = selected_device
             self.state.settings["hog_mode"] = bool(hog_var.get())
+            self.state.settings["genre_equalizer"] = staged_equalizers
             self.save_settings()
             self.set_audio_device(selected_device=selected_device)
             if theme_changed:
                 self.apply_theme_live()
             close_window()
-
-        refresh_button = customtkinter.CTkButton(
-            button_row,
-            text="Refresh",
-            width=80,
-            command=refresh_devices,
-        )
-        refresh_button.pack(side="left", padx=(0, 8))
 
         save_button = customtkinter.CTkButton(
             button_row,

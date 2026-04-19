@@ -233,6 +233,54 @@ def low_pass_filter(data, sample_rate, cutoff_freq):
     return filtered_data
 
 
+def peaking_eq_filter(data, sample_rate, center_freq, gain_db, q=1.0):
+    if abs(gain_db) < 0.01:
+        return data
+
+    nyquist = sample_rate / 2
+    clamped_freq = max(20.0, min(float(center_freq), nyquist - 1))
+    omega = 2 * math.pi * clamped_freq / sample_rate
+    alpha = math.sin(omega) / (2 * q)
+    amplitude = math.pow(10, gain_db / 40.0)
+    cos_omega = math.cos(omega)
+
+    b0 = 1 + alpha * amplitude
+    b1 = -2 * cos_omega
+    b2 = 1 - alpha * amplitude
+    a0 = 1 + alpha / amplitude
+    a1 = -2 * cos_omega
+    a2 = 1 - alpha / amplitude
+
+    b = np.array([b0 / a0, b1 / a0, b2 / a0], dtype=np.float64)
+    a = np.array([1.0, a1 / a0, a2 / a0], dtype=np.float64)
+    return lfilter(b, a, data)
+
+
+def apply_graphic_equalizer(data, sample_rate, eq_settings):
+    if not eq_settings or not eq_settings.get("enabled", False):
+        return data
+
+    bands = eq_settings.get("bands", {})
+    if not bands:
+        return data
+
+    ordered_bands = sorted((float(freq), float(gain)) for freq, gain in bands.items())
+    equalized = data.astype(np.float64)
+
+    for index, (center_freq, gain_db) in enumerate(ordered_bands):
+        lower_freq = ordered_bands[index - 1][0] if index > 0 else center_freq / 2
+        upper_freq = ordered_bands[index + 1][0] if index < len(ordered_bands) - 1 else center_freq * 2
+        bandwidth = max(1.0, upper_freq - lower_freq)
+        q = max(0.35, center_freq / bandwidth)
+        equalized = peaking_eq_filter(equalized, sample_rate, center_freq, gain_db, q=q)
+
+    peak = np.max(np.abs(equalized)) if len(equalized) else 0
+    if peak > 32767:
+        equalized = equalized * (32767.0 / peak)
+
+    return np.clip(equalized, -32768, 32767).astype(np.int16)
+
+
 oimage = None
 
 
@@ -292,6 +340,7 @@ def play_from_file(
     normalize_volume=True,
     low_frequency=10,
     high_frequency=20000,
+    eq_settings=None,
     song_id=None,
     files=None,
 ):
@@ -334,6 +383,9 @@ def play_from_file(
 
     filtered_left = low_pass_filter(left_channel, sample_rate, high_frequency)
     filtered_right = low_pass_filter(right_channel, sample_rate, high_frequency)
+
+    filtered_left = apply_graphic_equalizer(filtered_left, sample_rate, eq_settings)
+    filtered_right = apply_graphic_equalizer(filtered_right, sample_rate, eq_settings)
 
     filtered_audio = np.empty(
         (filtered_left.size + filtered_right.size,), dtype=np.int16
@@ -413,12 +465,15 @@ def play_from_list(song_id, songs, pos=0):
     if song_id is not None:
         file = songs[song_id][0]
         tags = songs[song_id][1]
+        genre = tags.get("genre", "")
         comment = ""
         if "comment" in tags.keys():
             comment = tags["comment"]
 
         high_frequency = extract_h_value(comment)
+        eq_settings = config.get_genre_equalizer_settings(genre)
         print("High frequency: ", high_frequency)
+        print("Genre EQ:", genre, eq_settings)
 
         try:
             play_from_file(
@@ -427,6 +482,7 @@ def play_from_list(song_id, songs, pos=0):
                 normalize_volume=True,
                 low_frequency=10,
                 high_frequency=high_frequency,
+                eq_settings=eq_settings,
                 song_id=song_id,
                 files=songs,
             )
