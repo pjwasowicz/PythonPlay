@@ -10,7 +10,6 @@ from app_state import UIRefs
 
 
 customtkinter.set_appearance_mode("system")
-customtkinter.set_default_color_theme("blue")
 
 
 class CTk(customtkinter.CTk, TkinterDnD.DnDWrapper):
@@ -24,9 +23,10 @@ def _get_row_count(settings):
     return column.count("\n") + 1
 
 
-def build_gui(app):
+def build_gui(app, root=None):
+    customtkinter.set_default_color_theme(app.get_color_theme())
     ui = UIRefs()
-    root = CTk()
+    root = root or CTk()
     ui.root = root
 
     root.geometry("430x800")
@@ -34,6 +34,7 @@ def build_gui(app):
     icon = PhotoImage(file="./icons/icon.png")
     root.iconphoto(True, icon)
     root.title("Milonga")
+    ui.root_icon = icon
 
     menu_bar = tk.Menu(root)
     if app.platform_system == "Darwin":
@@ -71,14 +72,13 @@ def build_gui(app):
     ui.status_bar = customtkinter.CTkLabel(panel, text="", anchor="w", height=30)
     ui.status_bar.pack(side="left", fill="x", padx=0)
 
-    ui.audio_device_dropdown = customtkinter.CTkOptionMenu(
+    ui.audio_settings_button = customtkinter.CTkButton(
         panel,
-        values=app.get_devices(),
-        command=app.set_audio_device,
-        width=150,
+        text="Settings",
+        width=90,
+        command=app.open_audio_settings_window,
     )
-    ui.audio_device_dropdown.pack(side="right", padx=0)
-    ui.audio_device_dropdown.bind("<Button-1>", app.update_device_list)
+    ui.audio_settings_button.pack(side="right", padx=0)
 
     play_icon = utils.load_and_resize_image(file="./icons/play.png")
     stop_icon = utils.load_and_resize_image(file="./icons/stop.png")
@@ -107,8 +107,12 @@ def build_gui(app):
     ui.delete_button.pack(side="left", padx=2, pady=2)
 
     columns = app.state.settings["main_grid"]["fields"]
+    theme_palette = app.get_treeview_palette()
     bg_color = root._apply_appearance_mode(customtkinter.ThemeManager.theme["CTkFrame"]["fg_color"])
     text_color = root._apply_appearance_mode(customtkinter.ThemeManager.theme["CTkLabel"]["text_color"])
+    if theme_palette is not None:
+        bg_color = theme_palette["background"]
+        text_color = theme_palette["foreground"]
 
     treestyle = ttk.Style()
     treestyle.theme_use("default")
@@ -123,7 +127,7 @@ def build_gui(app):
         "Treeview",
         background=bg_color,
         foreground=text_color,
-        fieldbackground=bg_color,
+        fieldbackground=theme_palette["fieldbackground"] if theme_palette is not None else bg_color,
         relief="flat",
         font=(font_name, font_size),
         rowheight=font_height * num_lines + 5,
@@ -137,23 +141,28 @@ def build_gui(app):
 
     root.bind("<<TreeviewSelect>>", lambda event: root.focus_set())
 
-    ui.tree = ttk.Treeview(root, columns=columns, selectmode="none", show="headings")
+    ui.tree = ttk.Treeview(root, columns=columns, selectmode="extended", show="")
     ui.tree.column(columns[-1], width=20)
-
-    for index, header in enumerate(app.state.settings["main_grid"]["headers"]):
-        ui.tree.heading(index, text=header)
 
     vsb = customtkinter.CTkScrollbar(root, command=ui.tree.yview)
     ui.tree.configure(yscrollcommand=vsb.set)
     vsb.pack(side="right", fill="y")
     ui.tree.pack(side="left", fill="both", expand=True)
 
-    ui.tree.tag_configure("play", background="yellow", foreground="blue")
-    ui.tree.tag_configure("over", background="silver", foreground="white")
-    ui.tree.tag_configure("cortina", foreground="red")
-    ui.tree.tag_configure("vals", foreground="green")
-    ui.tree.tag_configure("milonga", foreground="orange")
-    ui.tree.tag_configure("default", background="#ffffff")
+    if theme_palette is None:
+        ui.tree.tag_configure("play", background="yellow", foreground="blue")
+        ui.tree.tag_configure("over", background="silver", foreground="white")
+        ui.tree.tag_configure("cortina", foreground="red")
+        ui.tree.tag_configure("vals", foreground="green")
+        ui.tree.tag_configure("milonga", foreground="orange")
+        ui.tree.tag_configure("default", background="#ffffff")
+    else:
+        ui.tree.tag_configure("play", background=theme_palette["play_bg"], foreground=theme_palette["play_fg"])
+        ui.tree.tag_configure("over", background=theme_palette["over_bg"], foreground=theme_palette["over_fg"])
+        ui.tree.tag_configure("cortina", foreground=theme_palette["cortina_fg"])
+        ui.tree.tag_configure("vals", foreground=theme_palette["vals_fg"])
+        ui.tree.tag_configure("milonga", foreground=theme_palette["milonga_fg"])
+        ui.tree.tag_configure("default", background=theme_palette["default_bg"])
 
     ui.tree.bind("<ButtonPress-1>", app.b_down)
     ui.tree.bind("<ButtonRelease-1>", app.b_up, add="+")

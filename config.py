@@ -26,6 +26,9 @@ current_initial_settings = dict(
                             "{comment}"],
                 ),
                 volume=80,
+                color_theme="blue",
+                audio_device="",
+                hog_mode=False,
             )
 
 

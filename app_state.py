@@ -5,16 +5,20 @@ from typing import Any
 @dataclass
 class UIRefs:
     root: Any = None
+    root_icon: Any = None
     tree: Any = None
     slider: Any = None
     progressbar: Any = None
     status_bar: Any = None
+    audio_settings_window: Any = None
     start_button: Any = None
     stop_button: Any = None
     delete_button: Any = None
     pause_button: Any = None
     next_button: Any = None
+    audio_settings_button: Any = None
     audio_device_dropdown: Any = None
+    hog_mode_switch: Any = None
 
 
 @dataclass
@@ -23,6 +27,9 @@ class AppState:
     songs: dict = field(default_factory=dict)
     last_highlighted: Any = None
     is_dragging: bool = False
+    drag_items: tuple = ()
+    drop_target_index: Any = None
+    drop_indicator_id: Any = None
     last_y: Any = None
     current_song: Any = None
     is_playing: bool = False

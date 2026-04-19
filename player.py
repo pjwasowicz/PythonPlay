@@ -44,6 +44,10 @@ current_volume = 0.0
 loudnes_table = {}
 
 
+def is_initialized():
+    return pygame.mixer.get_init() is not None
+
+
 def delete_tmp_files():
     global tmp_files
     for file in tmp_files:
@@ -99,11 +103,13 @@ def can_load_sound(file_path):
 
 
 def quit_device():
-    pygame.mixer.quit()
+    if is_initialized():
+        pygame.mixer.quit()
 
 
 def set_device(selected_device):
-    pygame.mixer.quit()
+    if is_initialized():
+        pygame.mixer.quit()
     pygame.mixer.init(devicename=selected_device)
     pygame.mixer.music.set_volume(current_volume)
     print("Device set:", selected_device)
@@ -131,19 +137,23 @@ def set_volume(volume):
     v = volume * get_loudness_corretion()
     if v > 1:
         v = 1
-    pygame.mixer.music.set_volume(v)
+    if is_initialized():
+        pygame.mixer.music.set_volume(v)
 
 
 def pause():
-    pygame.mixer.music.pause()
+    if is_initialized():
+        pygame.mixer.music.pause()
 
 
 def unpause():
-    pygame.mixer.unpause()
+    if is_initialized():
+        pygame.mixer.unpause()
 
 
 def init_player():
-    pygame.mixer.init()
+    if not is_initialized():
+        pygame.mixer.init()
 
 
 def reset_progress():
@@ -185,11 +195,13 @@ def get_duration():
 
 
 def fade():
-    pygame.mixer.music.fadeout(config.fade_time)
+    if is_initialized():
+        pygame.mixer.music.fadeout(config.fade_time)
 
 
 def stop():
-    pygame.mixer.music.stop()
+    if is_initialized():
+        pygame.mixer.music.stop()
 
 
 def decode_mp3_to_pcm(input_mp3_path):
@@ -424,4 +436,6 @@ def play_from_list(song_id, songs, pos=0):
 
 
 def get_busy():
+    if not is_initialized():
+        return False
     return pygame.mixer.music.get_busy()
