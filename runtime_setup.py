@@ -3,6 +3,7 @@ import platform
 import subprocess
 from functools import wraps
 
+import config
 import logs
 
 
@@ -17,6 +18,7 @@ def setup_application_environment():
 
     ffmpeg_path = os.path.join(os.getcwd(), "ffmpeg")
     os.environ["PATH"] += os.pathsep + ffmpeg_path
+    config.initilize()
 
     if platform.system() == "Windows":
         old_popen = subprocess.Popen

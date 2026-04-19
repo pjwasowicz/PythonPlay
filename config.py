@@ -137,8 +137,7 @@ def get_version_from_settings(settings):
         return "0.0"
 
 def get_version():
-    settings = load_settings(settings_file)
-    return get_version_from_settings(settings)
+    return get_version_from_settings(current_initial_settings)
 
 def load_settings(settings_file=settings_file):
     fplist = os.path.join(get_application_support_directory(), settings_file)
@@ -190,5 +189,3 @@ def initilize():
         save_settings(merge_settings(current_initial_settings, settings))
     else:
         save_settings(settings)
-
-initilize()

@@ -15,6 +15,7 @@ includefiles = [
     ('icon.icns', 'icon.icns'),
     ('ffmpeg/ffmpeg', 'ffmpeg/ffmpeg'),
     ('ffmpeg/ffprobe', 'ffmpeg/ffprobe'),
+    ('themes/tango.json', 'themes/tango.json'),
 
 ]
 
@@ -22,8 +23,21 @@ includes = [
     "scipy.signal._delegators",
 ]
 
-
-excludes = []
+excludes = [
+    "test",
+    "tests",
+    "unittest",
+    "tkinter.test",
+    "pygame.tests",
+    "pygame.examples",
+    "numpy.tests",
+    "numpy._core.tests",
+    "numpy.random.tests",
+    "numpy.linalg.tests",
+    "numpy.fft.tests",
+    "numpy.lib.tests",
+    "matplotlib.tests",
+]
 packages = []
 
 base = ""
@@ -46,8 +60,15 @@ setup(
     version=config.get_version(),
     description = 'Milonga DJ App',
     author = 'Paweł Wąsowicz',
-    options = {'bdist_dmg':{'show_icon_preview':True},
-               'bdist_mac':{'plist_items':plist_items, "iconfile":"icon.icns"},
-               'build_exe': {'includes':includes,'excludes':excludes,'packages':packages,'include_files':includefiles}},
+    options = {
+        'bdist_dmg': {'show_icon_preview': True},
+        'bdist_mac': {'plist_items': plist_items, "iconfile": "icon.icns"},
+        'build_exe': {
+            'includes': includes,
+            'excludes': excludes,
+            'packages': packages,
+            'include_files': includefiles,
+        },
+    },
     executables=[Executable("milonga.py", base=base, target_name='Milonga')],
 )
