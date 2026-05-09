@@ -66,7 +66,7 @@ class MilongaApp:
         if theme not in self.AVAILABLE_COLOR_THEMES:
             return "blue"
         if theme == "tango":
-            return os.path.join(os.path.dirname(__file__), "themes", "tango.json")
+            return os.path.join("themes", "tango.json")
         return theme
 
     def get_treeview_palette(self):
