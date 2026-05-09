@@ -12,6 +12,11 @@ from app_state import UIRefs
 customtkinter.set_appearance_mode("system")
 
 
+EQ_PANEL_COLLAPSED_HEIGHT = 60
+EQ_PANEL_EXPANDED_HEIGHT = 236
+EQ_CANVAS_HEIGHT = 150
+
+
 class CTk(customtkinter.CTk, TkinterDnD.DnDWrapper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -71,8 +76,9 @@ def build_gui(app, root=None):
     ui.progressbar = customtkinter.CTkProgressBar(master=root)
     ui.progressbar.pack(side="top", fill="x", padx=10, pady=5)
 
-    eq_panel = customtkinter.CTkFrame(root)
+    eq_panel = customtkinter.CTkFrame(root, height=EQ_PANEL_COLLAPSED_HEIGHT)
     eq_panel.pack(side="bottom", fill="x", padx=10, pady=(0, 8))
+    eq_panel.pack_propagate(False)
     ui.eq_panel = eq_panel
 
     panel = customtkinter.CTkFrame(root)
@@ -89,8 +95,9 @@ def build_gui(app, root=None):
     )
     ui.audio_settings_button.pack(side="right", padx=0)
 
-    eq_header = customtkinter.CTkFrame(eq_panel)
+    eq_header = customtkinter.CTkFrame(eq_panel, height=40)
     eq_header.pack(side="top", fill="x", padx=8, pady=(8, 4))
+    eq_header.pack_propagate(False)
 
     eq_title = customtkinter.CTkLabel(eq_header, text="Genre EQ", anchor="w")
     eq_title.pack(side="left", padx=(0, 8))
@@ -101,7 +108,7 @@ def build_gui(app, root=None):
         eq_header,
         values=genre_names,
         variable=ui.eq_genre_var,
-        width=110,
+        width=100,
         command=app.on_eq_genre_change,
     )
     eq_genre_menu.pack(side="left", padx=(0, 8))
@@ -119,7 +126,7 @@ def build_gui(app, root=None):
     ui.eq_toggle_button = customtkinter.CTkButton(
         eq_header,
         text="▸",
-        width=32,
+        width=28,
         command=app.toggle_eq_panel,
     )
     ui.eq_toggle_button.pack(side="right", padx=(8, 0))
@@ -127,7 +134,7 @@ def build_gui(app, root=None):
     eq_flat_button = customtkinter.CTkButton(
         eq_header,
         text="Flat",
-        width=84,
+        width=68,
         command=app.set_eq_flat,
     )
     eq_flat_button.pack(side="right")
@@ -135,11 +142,11 @@ def build_gui(app, root=None):
     eq_body = customtkinter.CTkFrame(eq_panel, fg_color="transparent")
     ui.eq_body = eq_body
 
-    eq_canvas = tk.Canvas(eq_body, height=190, highlightthickness=0, borderwidth=0)
+    eq_canvas = tk.Canvas(eq_body, height=EQ_CANVAS_HEIGHT, highlightthickness=0, borderwidth=0)
     eq_scrollbar = customtkinter.CTkScrollbar(eq_body, orientation="horizontal", command=eq_canvas.xview)
     eq_canvas.configure(xscrollcommand=eq_scrollbar.set)
-    eq_canvas.pack(side="top", fill="x", padx=8, pady=(0, 2))
-    eq_scrollbar.pack(side="top", fill="x", padx=8, pady=(0, 8))
+    eq_canvas.pack(side="top", fill="x", padx=6, pady=(0, 2))
+    eq_scrollbar.pack(side="top", fill="x", padx=6, pady=(0, 6))
 
     eq_inner = tk.Frame(eq_canvas)
     eq_canvas_window = eq_canvas.create_window((0, 0), window=eq_inner, anchor="nw")
@@ -157,11 +164,11 @@ def build_gui(app, root=None):
     ui.eq_band_vars = {}
     ui.eq_band_labels = {}
     for frequency in app.EQ_BAND_ORDER:
-        column = tk.Frame(eq_inner, padx=4)
+        column = tk.Frame(eq_inner, padx=2)
         column.pack(side="left", fill="y")
         tk.Label(column, text=app.EQ_BAND_DISPLAY[frequency]).pack()
         value_label = tk.Label(column, text="0 dB")
-        value_label.pack(pady=(4, 6))
+        value_label.pack(pady=(2, 4))
         band_var = tk.DoubleVar(value=0.0)
         slider = customtkinter.CTkSlider(
             column,
@@ -170,7 +177,7 @@ def build_gui(app, root=None):
             number_of_steps=24,
             variable=band_var,
             orientation="vertical",
-            height=120,
+            height=96,
             width=16,
         )
         slider.pack()

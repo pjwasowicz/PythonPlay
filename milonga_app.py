@@ -325,12 +325,14 @@ class MilongaApp:
             player.update_live_eq(preset)
 
     def update_eq_panel_visibility(self):
-        if self.ui is None or self.ui.eq_body is None or self.ui.eq_toggle_button is None:
+        if self.ui is None or self.ui.eq_body is None or self.ui.eq_toggle_button is None or self.ui.eq_panel is None:
             return
         if self.eq_panel_expanded:
+            self.ui.eq_panel.configure(height=236)
             self.ui.eq_body.pack(side="top", fill="x", padx=8, pady=(0, 8))
             self.ui.eq_toggle_button.configure(text="▾")
         else:
+            self.ui.eq_panel.configure(height=60)
             self.ui.eq_body.pack_forget()
             self.ui.eq_toggle_button.configure(text="▸")
 
