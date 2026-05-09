@@ -24,6 +24,11 @@ def _get_row_count(settings):
 
 
 def build_gui(app, root=None):
+    if not hasattr(app, "eq_staged_equalizers") or not hasattr(app, "initialize_eq_state"):
+        raise AttributeError("MilongaApp is missing EQ state initialization")
+    if not getattr(app, "eq_staged_equalizers", None):
+        app.initialize_eq_state()
+
     customtkinter.set_default_color_theme(app.get_color_theme())
     ui = UIRefs()
     root = root or CTk()
@@ -66,6 +71,10 @@ def build_gui(app, root=None):
     ui.progressbar = customtkinter.CTkProgressBar(master=root)
     ui.progressbar.pack(side="top", fill="x", padx=10, pady=5)
 
+    eq_panel = customtkinter.CTkFrame(root)
+    eq_panel.pack(side="bottom", fill="x", padx=10, pady=(0, 8))
+    ui.eq_panel = eq_panel
+
     panel = customtkinter.CTkFrame(root)
     panel.pack(side="bottom", fill="x", padx=10, pady=10)
 
@@ -79,6 +88,100 @@ def build_gui(app, root=None):
         command=app.open_audio_settings_window,
     )
     ui.audio_settings_button.pack(side="right", padx=0)
+
+    eq_header = customtkinter.CTkFrame(eq_panel)
+    eq_header.pack(side="top", fill="x", padx=8, pady=(8, 4))
+
+    eq_title = customtkinter.CTkLabel(eq_header, text="Genre EQ", anchor="w")
+    eq_title.pack(side="left", padx=(0, 8))
+
+    genre_names = list(app.eq_staged_equalizers.keys())
+    ui.eq_genre_var = tk.StringVar(value=app.current_eq_genre if app.current_eq_genre in genre_names else genre_names[0])
+    eq_genre_menu = customtkinter.CTkOptionMenu(
+        eq_header,
+        values=genre_names,
+        variable=ui.eq_genre_var,
+        width=110,
+        command=app.on_eq_genre_change,
+    )
+    eq_genre_menu.pack(side="left", padx=(0, 8))
+
+    ui.eq_enabled_var = tk.BooleanVar(value=False)
+    eq_enabled_switch = customtkinter.CTkSwitch(
+        eq_header,
+        text="Enable",
+        variable=ui.eq_enabled_var,
+        onvalue=True,
+        offvalue=False,
+    )
+    eq_enabled_switch.pack(side="left", padx=(0, 8))
+
+    ui.eq_toggle_button = customtkinter.CTkButton(
+        eq_header,
+        text="▸",
+        width=32,
+        command=app.toggle_eq_panel,
+    )
+    ui.eq_toggle_button.pack(side="right", padx=(8, 0))
+
+    eq_flat_button = customtkinter.CTkButton(
+        eq_header,
+        text="Flat",
+        width=84,
+        command=app.set_eq_flat,
+    )
+    eq_flat_button.pack(side="right")
+
+    eq_body = customtkinter.CTkFrame(eq_panel, fg_color="transparent")
+    ui.eq_body = eq_body
+
+    eq_canvas = tk.Canvas(eq_body, height=190, highlightthickness=0, borderwidth=0)
+    eq_scrollbar = customtkinter.CTkScrollbar(eq_body, orientation="horizontal", command=eq_canvas.xview)
+    eq_canvas.configure(xscrollcommand=eq_scrollbar.set)
+    eq_canvas.pack(side="top", fill="x", padx=8, pady=(0, 2))
+    eq_scrollbar.pack(side="top", fill="x", padx=8, pady=(0, 8))
+
+    eq_inner = tk.Frame(eq_canvas)
+    eq_canvas_window = eq_canvas.create_window((0, 0), window=eq_inner, anchor="nw")
+
+    def _refresh_eq_scrollregion(event):
+        eq_canvas.configure(scrollregion=eq_canvas.bbox("all"))
+
+    def _resize_eq_window(event):
+        canvas_width = max(event.width, eq_inner.winfo_reqwidth())
+        eq_canvas.itemconfigure(eq_canvas_window, width=canvas_width)
+
+    eq_inner.bind("<Configure>", _refresh_eq_scrollregion)
+    eq_canvas.bind("<Configure>", _resize_eq_window)
+
+    ui.eq_band_vars = {}
+    ui.eq_band_labels = {}
+    for frequency in app.EQ_BAND_ORDER:
+        column = tk.Frame(eq_inner, padx=4)
+        column.pack(side="left", fill="y")
+        tk.Label(column, text=app.EQ_BAND_DISPLAY[frequency]).pack()
+        value_label = tk.Label(column, text="0 dB")
+        value_label.pack(pady=(4, 6))
+        band_var = tk.DoubleVar(value=0.0)
+        slider = customtkinter.CTkSlider(
+            column,
+            from_=-12,
+            to=12,
+            number_of_steps=24,
+            variable=band_var,
+            orientation="vertical",
+            height=120,
+            width=16,
+        )
+        slider.pack()
+        ui.eq_band_vars[frequency] = band_var
+        ui.eq_band_labels[frequency] = value_label
+
+    for band_var in ui.eq_band_vars.values():
+        band_var.trace_add("write", lambda *args: app.on_eq_band_change())
+    ui.eq_enabled_var.trace_add("write", lambda *args: app.on_eq_enabled_change())
+    app.load_eq_preset(ui.eq_genre_var.get())
+    app.update_eq_panel_visibility()
 
     play_icon = utils.load_and_resize_image(file="./icons/play.png")
     stop_icon = utils.load_and_resize_image(file="./icons/stop.png")

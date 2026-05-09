@@ -8,8 +8,8 @@ A specialized music player designed for Tango DJs and Milonga events. It provide
 - **Core Technologies**:
   - **Language**: Python 3
   - **GUI Framework**: `customtkinter` (a modern wrapper around `tkinter`)
-  - **Audio Backend**: `pygame.mixer`
-  - **Audio Processing**: `pyloudnorm` (loudness normalization), `pydub` (audio manipulation), `mutagen` (metadata), `scipy` (filtering).
+  - **Audio Backend**: `sounddevice` (replaces `pygame.mixer`)
+  - **Audio Processing**: `pyloudnorm` (loudness normalization), `pydub` (audio manipulation), `mutagen` (metadata), `scipy` (real-time filtering and EQ).
   - **Packaging**: `cx-Freeze` (for Windows builds), standard `setuptools` (`setup.py`).
 - **Key Features**:
   - **Drag-and-Drop Playlist**: Easily add files to the current playlist.
@@ -24,7 +24,7 @@ A specialized music player designed for Tango DJs and Milonga events. It provide
 
 - `milonga.py`: The entry point of the application.
 - `milonga_app.py`: Contains the `MilongaApp` class, the main orchestrator for the GUI and application state.
-- `player.py`: Encapsulates all audio playback logic, including `pygame` initialization, device management, and audio processing (normalization, filtering).
+- `player.py`: Encapsulates all audio playback logic, including `sounddevice` streaming, device management, and real-time audio processing (normalization, EQ, filtering).
 - `config.py`: Manages application settings, stored in a `.plist` file (on macOS) or equivalent Application Support directory.
 - `gui_builder.py`: Responsible for constructing the `customtkinter` GUI components.
 - `app_state.py`: Manages the internal state of the application (current songs, settings, etc.).
@@ -72,7 +72,7 @@ Or use the provided shell script on macOS/Linux:
 
 - **GUI**: Layout is handled primarily in `gui_builder.py` using `customtkinter`'s grid system.
 - **State Management**: The application uses an `AppState` object to track songs and settings, passed through `MilongaApp`.
-- **Audio Logic**: Avoid direct `pygame` calls in GUI code; use the abstraction layer in `player.py`.
+- **Audio Logic**: Avoid direct `sounddevice` or `pygame` calls in GUI code; use the abstraction layer in `player.py`.
 - **Settings**: Configuration is managed via `config.py`. Settings are automatically loaded and merged with defaults on startup.
 - **Audio Files**: The player supports `.mp3`, `.ogg`, `.aif`, `.aiff`, `.m4a`, and `.flac`. Non-standard files may be converted to `.mp3` automatically and stored in the application support directory.
 

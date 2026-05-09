@@ -19,6 +19,13 @@ class UIRefs:
     audio_settings_button: Any = None
     audio_device_dropdown: Any = None
     hog_mode_switch: Any = None
+    eq_panel: Any = None
+    eq_genre_var: Any = None
+    eq_enabled_var: Any = None
+    eq_band_vars: Any = None
+    eq_band_labels: Any = None
+    eq_body: Any = None
+    eq_toggle_button: Any = None
 
 
 @dataclass

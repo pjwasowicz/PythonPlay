@@ -1,35 +1,35 @@
-import pygame
-import pyloudnorm as pyln
-import config
-import os
-import utils
-import uuid
 import json
-import numpy as np
-from scipy.signal import butter, lfilter
-import tempfile
-import wave
-import time
-import re
-import threading
-from io import BytesIO
-import global_vars
-import tkinter as tk
-import matplotlib
-import pygame._sdl2.audio as sdl2_audio
-import matplotlib.pyplot as plt
-from PIL import Image
 import math
+import os
+import re
+import tempfile
+import threading
+import time
+import uuid
+import wave
+from io import BytesIO
+
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pygame
+import pygame._sdl2.audio as sdl2_audio
+import pyloudnorm as pyln
+from PIL import Image
+from scipy.signal import butter, lfilter
+
+import config
+import global_vars
+import utils
 
 
 matplotlib.use("Agg")
 
 
-
 tmp_files = []
 
 current_duration = 0
-loudnes_correction = 0
+loudnes_correction = 1.0
 
 start_pos = 0
 
@@ -38,10 +38,7 @@ allowed_files = [".mp3", ".ogg", ".aif", ".aiff", ".m4a", ".flac"]
 converted_files = {}
 
 current_volume = 0.0
-
-
-
-loudnes_table = {}
+_live_playback_context = None
 
 
 def is_initialized():
@@ -89,14 +86,11 @@ def can_load_sound(file_path):
         extension = extension.lower()
         if extension in allowed_files:
             return file_path
-        else:
-            new_sound_file = str(uuid.uuid4()) + ".mp3"
-            new_file = os.path.join(
-                config.get_application_support_directory(), new_sound_file
-            )
-            utils.convert_to_mp3_with_tags(file_path, new_file)
-            converted_files[new_file] = file_path
-            return new_file
+        new_sound_file = str(uuid.uuid4()) + ".mp3"
+        new_file = os.path.join(config.get_application_support_directory(), new_sound_file)
+        utils.convert_to_mp3_with_tags(file_path, new_file)
+        converted_files[new_file] = file_path
+        return new_file
     except Exception as e:
         print("Cannot load: ", file_path, e)
         return None
@@ -116,8 +110,7 @@ def set_device(selected_device):
 
 
 def get_devices(capture_devices: bool = False):
-    devices = tuple(sdl2_audio.get_audio_device_names(capture_devices))
-    return devices
+    return tuple(sdl2_audio.get_audio_device_names(capture_devices))
 
 
 def pcm_to_float(pcm_data, bit_depth=16):
@@ -127,8 +120,7 @@ def pcm_to_float(pcm_data, bit_depth=16):
 
 def get_loudness(data, rate):
     meter = pyln.Meter(rate)
-    loudness = meter.integrated_loudness(pcm_to_float(data))
-    return loudness
+    return meter.integrated_loudness(pcm_to_float(data))
 
 
 def set_volume(volume):
@@ -157,8 +149,7 @@ def init_player():
 
 
 def reset_progress():
-    global current_duration
-    global start_pos
+    global current_duration, start_pos
     current_duration = 0
     start_pos = 0
 
@@ -168,22 +159,21 @@ def get_loudness_corretion():
 
 
 def get_loudness_corretion_db():
-    db = 20 * math.log10(loudnes_correction)
-    return db
+    if loudnes_correction <= 0:
+        return -100
+    return 20 * math.log10(loudnes_correction)
 
 
 def get_progress():
-    global current_duration
-    global start_pos
+    global current_duration, start_pos
     if current_duration > 0:
         pos = get_pos()
         return (pos + start_pos) / (current_duration * 1000)
-    else:
-        return 0
+    return 0
 
 
 def get_pos():
-    return pygame.mixer_music.get_pos()
+    return pygame.mixer.music.get_pos()
 
 
 def get_start_pos():
@@ -207,30 +197,14 @@ def stop():
 def decode_mp3_to_pcm(input_mp3_path):
     from pydub import AudioSegment
 
-    audio = AudioSegment.from_file(input_mp3_path)
-    audio = audio.set_frame_rate(44100).set_channels(2)
-    return audio
-
-
-def db_to_amplitude(db):
-    return 10 ** (db / 20)
-
-
-def apply_band_filter(data, sample_rate, low_frequency=10, high_frequency=20000):
-    nyquist = 0.5 * sample_rate
-    low_cutoff = low_frequency / nyquist
-    high_cutoff = high_frequency / nyquist
-    b, a = butter(5, [low_cutoff, high_cutoff], btype="band", analog=False)
-    filtered_data = lfilter(b, a, data)
-    return filtered_data
+    return AudioSegment.from_file(input_mp3_path).set_frame_rate(44100).set_channels(2)
 
 
 def low_pass_filter(data, sample_rate, cutoff_freq):
     nyquist = 0.5 * sample_rate
     normal_cutoff = cutoff_freq / nyquist
     b, a = butter(5, normal_cutoff, btype="low", analog=False)
-    filtered_data = lfilter(b, a, data)
-    return filtered_data
+    return lfilter(b, a, data)
 
 
 def peaking_eq_filter(data, sample_rate, center_freq, gain_db, q=1.0):
@@ -281,12 +255,11 @@ def apply_graphic_equalizer(data, sample_rate, eq_settings):
     return np.clip(equalized, -32768, 32767).astype(np.int16)
 
 
-oimage = None
-
-
 def make_wave(pcm_data, sample_rate):
-    global oimage
     global_canvas = global_vars.wave_canvas
+    if global_canvas is None:
+        return
+
     plt.figure(figsize=(15, 5))
     step = 10
     times = np.linspace(0, len(pcm_data) / sample_rate, num=len(pcm_data))[::step]
@@ -304,9 +277,7 @@ def make_wave(pcm_data, sample_rate):
 
     canvas_width = global_canvas.winfo_width()
     canvas_height = global_canvas.winfo_height()
-
     img = img.resize((canvas_width, canvas_height))
-
     global_vars.canvas_image = img
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
@@ -319,14 +290,11 @@ def make_wave(pcm_data, sample_rate):
     global_vars.wave_queue.put(temp_filename)
 
 
-
-
 def get_loudness_from_file(file):
     audio_segment = decode_mp3_to_pcm(file)
     sample_rate = audio_segment.frame_rate
     pcm_data = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
-    loudness = get_loudness(pcm_data, sample_rate)
-    return loudness
+    return get_loudness(pcm_data, sample_rate)
 
 
 def detect_silence_start_end_from_file(file, min_silence_len, silence_tresh):
@@ -343,12 +311,9 @@ def play_from_file(
     eq_settings=None,
     song_id=None,
     files=None,
+    update_wave=True,
 ):
-    global tmp_files
-    global current_volume
-    global loudnes_correction
-    global current_duration
-    global start_pos
+    global tmp_files, current_volume, loudnes_correction, current_duration, start_pos, _live_playback_context
 
     start_time = time.time()
 
@@ -356,12 +321,10 @@ def play_from_file(
     sample_width = 2
 
     audio_segment = decode_mp3_to_pcm(file)
-
     data = files[song_id]
-    if len(data) > 2:
+    if len(data) > 4:
         start_cut = data[3]
         end_cut = data[4]
-
     else:
         print("Extra cut for file:", file)
         start_cut, end_cut = utils.detect_silence_start_end(audio_segment, 200, -56)
@@ -372,11 +335,9 @@ def play_from_file(
     sample_rate = audio_segment.frame_rate
     pcm_data = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
 
-    def worker():
-        make_wave(pcm_data, sample_rate)
-
-    thread = threading.Thread(target=worker, daemon=True)
-    thread.start()
+    if update_wave:
+        thread = threading.Thread(target=lambda: make_wave(pcm_data, sample_rate), daemon=True)
+        thread.start()
 
     left_channel = pcm_data[0::2]
     right_channel = pcm_data[1::2]
@@ -387,25 +348,19 @@ def play_from_file(
     filtered_left = apply_graphic_equalizer(filtered_left, sample_rate, eq_settings)
     filtered_right = apply_graphic_equalizer(filtered_right, sample_rate, eq_settings)
 
-    filtered_audio = np.empty(
-        (filtered_left.size + filtered_right.size,), dtype=np.int16
-    )
-
+    filtered_audio = np.empty((filtered_left.size + filtered_right.size,), dtype=np.int16)
     filtered_audio[0::2] = filtered_left
     filtered_audio[1::2] = filtered_right
 
     if normalize_volume:
-
-        data = files[song_id]
         if len(data) > 2:
-            l = data[2]
+            loudness = data[2]
         else:
             print("Extra loudness for file:", file)
-            l = get_loudness(pcm_data, sample_rate)
+            loudness = get_loudness(pcm_data, sample_rate)
 
         target_lufs = -20
-        difference = target_lufs - l
-
+        difference = target_lufs - loudness
         scaling_factor = 10 ** (difference / 20.0)
 
         new_volume = scaling_factor * current_volume
@@ -413,25 +368,20 @@ def play_from_file(
             new_volume = 1
 
         loudnes_correction = scaling_factor
-
-        print("Volume:", current_volume, new_volume, scaling_factor, l)
-
+        print("Volume:", current_volume, new_volume, scaling_factor, loudness)
         pygame.mixer.music.set_volume(new_volume)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
         temp_file_path = temp_file.name
-
         with wave.open(temp_file, "wb") as output_wav:
-            output_wav.setnchannels(num_channels)  # Stereo
-            output_wav.setsampwidth(sample_width)  # 16-bitowe dane
+            output_wav.setnchannels(num_channels)
+            output_wav.setsampwidth(sample_width)
             output_wav.setframerate(sample_rate)
             trim_audio = filtered_audio.tobytes()
             output_wav.writeframes(trim_audio)
 
     audio_length_in_bytes = len(trim_audio)
-    duration_seconds = audio_length_in_bytes / (
-        sample_rate * num_channels * sample_width
-    )
+    duration_seconds = audio_length_in_bytes / (sample_rate * num_channels * sample_width)
 
     pygame.mixer.music.load(temp_file_path)
     end_time = time.time()
@@ -440,16 +390,23 @@ def play_from_file(
     tmp_files.append(temp_file_path)
 
     current_duration = duration_seconds
-    start_pos = start_pos + pos
+    start_pos = pos
     pos = pos / 1000
 
-    fade_time = 0
-    if pos > 0:
-        fade_time = config.fade_time
+    fade_time = config.fade_time if pos > 0 else 0
     pygame.mixer.music.play(fade_ms=fade_time, start=pos)
 
-    print(f"Encoding time: {end_time - start_time:.4f} s")
+    _live_playback_context = {
+        "file": file,
+        "song_id": song_id,
+        "files": files,
+        "normalize_volume": normalize_volume,
+        "low_frequency": low_frequency,
+        "high_frequency": high_frequency,
+        "eq_settings": eq_settings,
+    }
 
+    print(f"Encoding time: {end_time - start_time:.4f} s")
     return duration_seconds
 
 
@@ -457,8 +414,7 @@ def extract_h_value(input_string, default_value=20000):
     match = re.search(r"h:(\d+)", input_string.lower())
     if match:
         return int(match.group(1))
-    else:
-        return default_value
+    return default_value
 
 
 def play_from_list(song_id, songs, pos=0):
@@ -466,9 +422,7 @@ def play_from_list(song_id, songs, pos=0):
         file = songs[song_id][0]
         tags = songs[song_id][1]
         genre = tags.get("genre", "")
-        comment = ""
-        if "comment" in tags.keys():
-            comment = tags["comment"]
+        comment = tags.get("comment", "")
 
         high_frequency = extract_h_value(comment)
         eq_settings = config.get_genre_equalizer_settings(genre)
@@ -489,6 +443,30 @@ def play_from_list(song_id, songs, pos=0):
         except Exception as e:
             print("Error: ", str(e))
         print("Playing: ", song_id, file)
+
+
+def update_live_eq(eq_settings):
+    global _live_playback_context
+
+    if not _live_playback_context or not get_busy():
+        return
+
+    pos = max(0, get_pos() + get_start_pos())
+    context = dict(_live_playback_context)
+    context["eq_settings"] = eq_settings
+    _live_playback_context = context
+
+    play_from_file(
+        context["file"],
+        pos=pos,
+        normalize_volume=context["normalize_volume"],
+        low_frequency=context["low_frequency"],
+        high_frequency=context["high_frequency"],
+        eq_settings=context["eq_settings"],
+        song_id=context["song_id"],
+        files=context["files"],
+        update_wave=False,
+    )
 
 
 def get_busy():

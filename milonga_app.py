@@ -1,6 +1,7 @@
 import os
 import platform
 import re
+import sys
 import tempfile
 import threading
 import tkinter as tk
@@ -25,6 +26,18 @@ except Exception:
 
 class MilongaApp:
     AVAILABLE_COLOR_THEMES = ("blue", "green", "dark-blue", "tango")
+    EQ_BAND_ORDER = ["63", "160", "400", "1000", "2500", "6300", "10000", "16000", "20000"]
+    EQ_BAND_DISPLAY = {
+        "63": "63",
+        "160": "160",
+        "400": "400",
+        "1000": "1k",
+        "2500": "2.5k",
+        "6300": "6.3k",
+        "10000": "10k",
+        "16000": "16k",
+        "20000": "20k",
+    }
 
     def __init__(self):
         self.dt = 100
@@ -34,6 +47,12 @@ class MilongaApp:
         self.state = AppState(settings=config.load_settings())
         self.ui = None
         self.hog_mode_device_name = None
+        self.eq_staged_equalizers = {}
+        self.current_eq_genre = "default"
+        self.live_eq_job_id = None
+        self.suppress_live_eq_update = False
+        self.eq_panel_expanded = False
+        self.initialize_eq_state()
 
     def run(self):
         player.load_converted_files()
@@ -106,28 +125,19 @@ class MilongaApp:
                 tree.selection_set(valid_selection)
 
     def apply_theme_live(self):
-        root = self.ui.root
-        current_order = list(self.ui.tree.get_children())
-        current_selection = list(self.ui.tree.selection())
-        progress_value = self.ui.progressbar.get()
-        volume = self.state.settings["volume"]
+        self.restart_application()
 
+    def restart_application(self):
+        self.cancel_live_eq_job()
         if self.ui.audio_settings_window is not None and self.ui.audio_settings_window.winfo_exists():
             self.ui.audio_settings_window.destroy()
             self.ui.audio_settings_window = None
-
-        root.config(menu=tk.Menu(root))
-        for child in root.winfo_children():
-            child.destroy()
-
-        self.ui = build_gui(self, root=root)
-        self.render_playlist(order=current_order, selection=current_selection)
-        self.clear_playing()
-        if self.state.current_song is not None:
-            self.select_playing(self.state.current_song)
-        self.ui.progressbar.set(progress_value)
-        self.ui.slider.set(volume)
-        self.setup_buttons()
+        self.release_hog_mode_if_needed()
+        player.quit_device()
+        if getattr(sys, "frozen", False):
+            os.execl(sys.executable, sys.executable)
+        script_path = os.path.abspath(sys.argv[0])
+        os.execl(sys.executable, sys.executable, script_path, *sys.argv[1:])
 
     def ensure_audio_settings(self):
         available_devices = list(self.get_devices())
@@ -160,6 +170,164 @@ class MilongaApp:
 
     def save_settings(self):
         config.save_settings(self.state.settings)
+
+    def initialize_eq_state(self):
+        equalizer_settings = self.state.settings.get("genre_equalizer", {})
+        self.eq_staged_equalizers = {}
+        for genre_name, eq_settings in equalizer_settings.items():
+            self.eq_staged_equalizers[genre_name] = {
+                "enabled": bool(eq_settings.get("enabled", False)),
+                "bands": {
+                    band: float(eq_settings.get("bands", {}).get(band, 0))
+                    for band in self.EQ_BAND_ORDER
+                },
+            }
+        if not self.eq_staged_equalizers:
+            self.eq_staged_equalizers["default"] = {
+                "enabled": False,
+                "bands": {band: 0.0 for band in self.EQ_BAND_ORDER},
+            }
+        if self.current_eq_genre not in self.eq_staged_equalizers:
+            self.current_eq_genre = next(iter(self.eq_staged_equalizers))
+
+    def cancel_live_eq_job(self):
+        if self.live_eq_job_id is not None and self.ui is not None and self.ui.root is not None:
+            self.ui.root.after_cancel(self.live_eq_job_id)
+        self.live_eq_job_id = None
+
+    def schedule_live_eq_update(self):
+        self.cancel_live_eq_job()
+        if self.ui is None or self.ui.root is None:
+            return
+        self.live_eq_job_id = self.ui.root.after(120, self.apply_live_eq_update)
+
+    def apply_live_eq_update(self):
+        self.live_eq_job_id = None
+        if self.suppress_live_eq_update:
+            return
+        if not (self.state.is_playing and self.state.current_song):
+            return
+        if self.state.current_song not in self.state.songs:
+            return
+
+        tags = self.state.songs[self.state.current_song][1]
+        song_genre = tags.get("genre", "default")
+        if song_genre != self.current_eq_genre:
+            return
+
+        self.store_current_eq_preset()
+        preset = self.eq_staged_equalizers.get(song_genre)
+        if preset is not None:
+            player.update_live_eq(preset)
+
+    def update_eq_band_labels(self, schedule_live_update=True):
+        if self.ui is None or not self.ui.eq_band_labels:
+            return
+        for frequency, value_label in self.ui.eq_band_labels.items():
+            value_label.configure(text=f"{int(round(self.ui.eq_band_vars[frequency].get()))} dB")
+        if schedule_live_update:
+            self.schedule_live_eq_update()
+
+    def store_current_eq_preset(self):
+        if self.ui is None or self.ui.eq_enabled_var is None or not self.ui.eq_band_vars:
+            return
+        genre_name = self.current_eq_genre
+        if genre_name not in self.eq_staged_equalizers:
+            return
+        self.eq_staged_equalizers[genre_name] = {
+            "enabled": bool(self.ui.eq_enabled_var.get()),
+            "bands": {
+                frequency: int(round(self.ui.eq_band_vars[frequency].get()))
+                for frequency in self.EQ_BAND_ORDER
+            },
+        }
+
+    def load_eq_preset(self, genre_name, schedule_live_update=False):
+        if self.ui is None or self.ui.eq_enabled_var is None or not self.ui.eq_band_vars:
+            return
+        self.suppress_live_eq_update = True
+        preset = self.eq_staged_equalizers.get(
+            genre_name,
+            {"enabled": False, "bands": {band: 0 for band in self.EQ_BAND_ORDER}},
+        )
+        self.ui.eq_enabled_var.set(bool(preset.get("enabled", False)))
+        for frequency in self.EQ_BAND_ORDER:
+            self.ui.eq_band_vars[frequency].set(float(preset.get("bands", {}).get(frequency, 0)))
+        self.current_eq_genre = genre_name
+        if self.ui.eq_genre_var is not None:
+            self.ui.eq_genre_var.set(genre_name)
+        self.update_eq_band_labels(schedule_live_update=schedule_live_update)
+        if not schedule_live_update:
+            self.cancel_live_eq_job()
+        self.suppress_live_eq_update = False
+
+    def on_eq_genre_change(self, selected_genre):
+        self.store_current_eq_preset()
+        self.persist_eq_settings()
+        self.load_eq_preset(selected_genre, schedule_live_update=True)
+
+    def save_eq_settings(self):
+        self.store_current_eq_preset()
+        self.persist_eq_settings()
+
+    def persist_eq_settings(self):
+        self.state.settings["genre_equalizer"] = self.eq_staged_equalizers
+        self.save_settings()
+
+    def on_eq_enabled_change(self):
+        self.update_eq_band_labels()
+        if self.suppress_live_eq_update:
+            return
+        self.store_current_eq_preset()
+        self.persist_eq_settings()
+
+    def on_eq_band_change(self):
+        self.update_eq_band_labels()
+        if self.suppress_live_eq_update:
+            return
+        self.store_current_eq_preset()
+        self.persist_eq_settings()
+
+    def set_eq_flat(self):
+        if self.ui is None or not self.ui.eq_band_vars:
+            return
+        self.suppress_live_eq_update = True
+        for frequency in self.EQ_BAND_ORDER:
+            self.ui.eq_band_vars[frequency].set(0.0)
+        self.suppress_live_eq_update = False
+        self.update_eq_band_labels()
+        self.store_current_eq_preset()
+        self.persist_eq_settings()
+
+    def sync_eq_genre_with_song(self, song_id):
+        if song_id is None or song_id not in self.state.songs:
+            return
+
+        song_genre = self.state.songs[song_id][1].get("genre", "default")
+        if song_genre not in self.eq_staged_equalizers:
+            self.eq_staged_equalizers[song_genre] = {
+                "enabled": False,
+                "bands": {band: 0.0 for band in self.EQ_BAND_ORDER},
+            }
+
+        if self.ui is not None and self.ui.eq_genre_var is not None:
+            self.load_eq_preset(song_genre, schedule_live_update=False)
+        else:
+            self.current_eq_genre = song_genre
+
+    def update_eq_panel_visibility(self):
+        if self.ui is None or self.ui.eq_body is None or self.ui.eq_toggle_button is None:
+            return
+        if self.eq_panel_expanded:
+            self.ui.eq_body.pack(side="top", fill="x", padx=8, pady=(0, 8))
+            self.ui.eq_toggle_button.configure(text="▾")
+        else:
+            self.ui.eq_body.pack_forget()
+            self.ui.eq_toggle_button.configure(text="▸")
+
+    def toggle_eq_panel(self):
+        self.eq_panel_expanded = not self.eq_panel_expanded
+        self.update_eq_panel_visibility()
 
     def apply_hog_mode(self, device_name):
         if not self.supports_hog_mode():
@@ -266,7 +434,7 @@ class MilongaApp:
 
         window = tk.Toplevel(self.ui.root)
         window.title("Settings")
-        window.geometry("1280x620")
+        window.geometry("420x220")
         window.resizable(False, False)
         window.transient(self.ui.root)
         self.ui.audio_settings_window = window
@@ -309,120 +477,8 @@ class MilongaApp:
         if not self.supports_hog_mode():
             hog_switch.configure(state="disabled")
 
-        tk.Label(frame, text="Genre EQ", font=("Arial", 13, "bold")).grid(
-            row=3, column=0, columnspan=3, sticky="w", pady=(22, 8)
-        )
-
-        equalizer_settings = self.state.settings.get("genre_equalizer", {})
-        genre_names = list(equalizer_settings.keys())
-        selected_genre_var = tk.StringVar(value=genre_names[0] if genre_names else "default")
-        tk.Label(frame, text="Preset genre").grid(row=4, column=0, sticky="w")
-        genre_dropdown = customtkinter.CTkOptionMenu(
-            frame,
-            values=genre_names if genre_names else ["default"],
-            variable=selected_genre_var,
-            width=240,
-        )
-        genre_dropdown.grid(row=4, column=1, sticky="ew", padx=(12, 0))
-
-        eq_enabled_var = tk.BooleanVar(value=False)
-        eq_enabled_switch = customtkinter.CTkSwitch(
-            frame,
-            text="Enable equalizer for this genre",
-            variable=eq_enabled_var,
-            onvalue=True,
-            offvalue=False,
-        )
-        eq_enabled_switch.grid(row=5, column=0, columnspan=3, sticky="w", pady=(14, 0))
-
-        band_frame = tk.Frame(frame)
-        band_frame.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(12, 0))
-
-        eq_band_vars = {}
-        eq_band_labels = {}
-        band_order = ["25", "40", "63", "100", "160", "250", "400", "630", "1000", "1600", "2500", "4000", "6300", "10000", "16000"]
-        band_display = {
-            "25": "25",
-            "40": "40",
-            "63": "63",
-            "100": "100",
-            "160": "160",
-            "250": "250",
-            "400": "400",
-            "630": "630",
-            "1000": "1k",
-            "1600": "1.6k",
-            "2500": "2.5k",
-            "4000": "4k",
-            "6300": "6.3k",
-            "10000": "10k",
-            "16000": "16k",
-        }
-        for index, frequency in enumerate(band_order):
-            column = tk.Frame(band_frame, padx=4)
-            column.pack(side="left", fill="y", expand=True)
-            tk.Label(column, text=band_display[frequency]).pack()
-            value_label = tk.Label(column, text="0 dB")
-            value_label.pack(pady=(4, 8))
-            band_var = tk.DoubleVar(value=0.0)
-            slider = customtkinter.CTkSlider(
-                column,
-                from_=-12,
-                to=12,
-                number_of_steps=24,
-                variable=band_var,
-                orientation="vertical",
-                height=160,
-            )
-            slider.pack()
-            eq_band_vars[frequency] = band_var
-            eq_band_labels[frequency] = value_label
-
         button_row = tk.Frame(frame)
-        button_row.grid(row=7, column=0, columnspan=3, sticky="e", pady=(48, 12))
-
-        staged_equalizers = {}
-        for genre_name, eq_settings in equalizer_settings.items():
-            staged_equalizers[genre_name] = {
-                "enabled": bool(eq_settings.get("enabled", False)),
-                "bands": {band: float(eq_settings.get("bands", {}).get(band, 0)) for band in band_order},
-            }
-
-        current_eq_genre = {"name": selected_genre_var.get()}
-
-        def update_band_labels():
-            for frequency, value_label in eq_band_labels.items():
-                value_label.configure(text=f"{int(round(eq_band_vars[frequency].get()))} dB")
-
-        def store_current_eq_preset():
-            genre_name = current_eq_genre["name"]
-            if genre_name not in staged_equalizers:
-                return
-            staged_equalizers[genre_name] = {
-                "enabled": bool(eq_enabled_var.get()),
-                "bands": {frequency: int(round(eq_band_vars[frequency].get())) for frequency in band_order},
-            }
-
-        def load_eq_preset(genre_name):
-            preset = staged_equalizers.get(
-                genre_name,
-                {"enabled": False, "bands": {band: 0 for band in band_order}},
-            )
-            eq_enabled_var.set(bool(preset.get("enabled", False)))
-            for frequency in band_order:
-                eq_band_vars[frequency].set(float(preset.get("bands", {}).get(frequency, 0)))
-            update_band_labels()
-            current_eq_genre["name"] = genre_name
-
-        def on_eq_genre_change(selected_genre):
-            store_current_eq_preset()
-            load_eq_preset(selected_genre)
-
-        genre_dropdown.configure(command=on_eq_genre_change)
-        load_eq_preset(selected_genre_var.get())
-
-        for frequency, band_var in eq_band_vars.items():
-            band_var.trace_add("write", lambda *args: update_band_labels())
+        button_row.grid(row=3, column=0, columnspan=2, sticky="e", pady=(24, 0))
 
         def close_window():
             self.ui.audio_settings_window = None
@@ -433,12 +489,10 @@ class MilongaApp:
             selected_device = device_var.get().strip()
             selected_theme = theme_var.get().strip()
             theme_changed = selected_theme != self.get_color_theme()
-            store_current_eq_preset()
 
             self.state.settings["color_theme"] = selected_theme
             self.state.settings["audio_device"] = selected_device
             self.state.settings["hog_mode"] = bool(hog_var.get())
-            self.state.settings["genre_equalizer"] = staged_equalizers
             self.save_settings()
             self.set_audio_device(selected_device=selected_device)
             if theme_changed:
@@ -678,6 +732,7 @@ class MilongaApp:
     def on_pause(self):
         if self.state.is_paused:
             pos = self.state.current_position + config.fade_time
+            self.sync_eq_genre_with_song(self.state.current_song)
             player.play_from_list(self.state.current_song, self.state.songs, pos=pos)
             self.select_playing(self.state.current_song)
             self.state.is_playing = True
@@ -731,6 +786,7 @@ class MilongaApp:
         self.ui.progressbar.set(0)
         if song is None:
             return
+        self.sync_eq_genre_with_song(song)
         player.play_from_list(song, self.state.songs)
         self.select_playing(song)
         self.state.current_song = song
@@ -954,6 +1010,7 @@ class MilongaApp:
                 next_song = self.get_next_song(self.state.current_song)
                 if next_song is not None:
                     self.state.current_song = next_song
+                    self.sync_eq_genre_with_song(self.state.current_song)
                     self.select_playing(self.state.current_song)
                     player.reset_progress()
                     player.play_from_list(self.state.current_song, self.state.songs)
