@@ -727,21 +727,22 @@ class MilongaApp:
             self.ui.tree.item(song_id, tags=("play",))
 
     def on_next(self):
-        player.fade()
+        if not self.state.is_playing or self.state.pending_transport_action is not None:
+            return
+        self.state.pending_transport_action = "next"
+        player.fade_to("stop", config.fade_time)
 
     def on_pause(self):
         if self.state.is_paused:
-            pos = self.state.current_position + config.fade_time
-            self.sync_eq_genre_with_song(self.state.current_song)
-            player.play_from_list(self.state.current_song, self.state.songs, pos=pos)
-            self.select_playing(self.state.current_song)
-            self.state.is_playing = True
+            player.unpause()
             self.state.is_paused = False
+            self.state.pending_transport_action = None
             return
 
-        self.state.current_position = player.get_pos()
-        player.fade()
-        self.state.is_paused = True
+        if self.state.pending_transport_action is not None:
+            return
+        self.state.pending_transport_action = "pause"
+        player.fade_to("pause", config.fade_time)
 
     def on_delete(self):
         selected_items = self.ui.tree.selection()
@@ -786,6 +787,10 @@ class MilongaApp:
         self.ui.progressbar.set(0)
         if song is None:
             return
+        self.state.pending_transport_action = None
+        self.state.waiting_time = 0
+        self.state.is_paused = False
+        self.state.abort_loudness_scan = True
         self.sync_eq_genre_with_song(song)
         player.play_from_list(song, self.state.songs)
         self.select_playing(song)
@@ -801,13 +806,10 @@ class MilongaApp:
         if not result:
             return
 
-        player.fade()
-        self.clear_playing()
-        player.reset_progress()
-        if self.state.current_song in self.ui.tree.get_children():
-            self.ui.tree.selection_set(self.state.current_song)
-        self.state.is_playing = False
-        global_vars.wave_canvas.delete("all")
+        if self.state.pending_transport_action is not None:
+            return
+        self.state.pending_transport_action = "stop"
+        player.fade_to("stop", 120)
 
     def make_drop(self, event):
         if not event.data:
@@ -952,6 +954,8 @@ class MilongaApp:
         self.state.is_converting = True
         try:
             for song_id in list(self.state.songs.keys()):
+                if self.state.abort_loudness_scan or self.state.is_playing or player.get_busy() or self.state.is_paused:
+                    break
                 data = self.state.songs.get(song_id)
                 if data is None or len(data) != 2:
                     continue
@@ -967,6 +971,8 @@ class MilongaApp:
                 self.state.songs[song_id] = tuple(new_data)
         finally:
             self.state.is_converting = False
+            if not self.state.is_playing and not self.state.is_paused:
+                self.state.abort_loudness_scan = False
 
     def draw_wave(self, temp_filename):
         self.oimage = tk.PhotoImage(file=temp_filename)
@@ -979,7 +985,13 @@ class MilongaApp:
         if global_vars.wave_queue.qsize() > 0:
             self.draw_wave(global_vars.wave_queue.get(block=False))
 
-        if not self.state.is_converting:
+        if (
+            not self.state.is_converting
+            and not self.state.is_playing
+            and not player.get_busy()
+            and not self.state.is_paused
+            and not self.state.abort_loudness_scan
+        ):
             self.state.is_converting = True
             thread = threading.Thread(target=self.update_loudness, daemon=True)
             thread.start()
@@ -1003,7 +1015,45 @@ class MilongaApp:
         else:
             self.ui.status_bar.configure(text="")
 
-        if not (player.get_busy() or self.state.is_paused) and self.state.is_playing:
+        if not player.get_busy() and self.state.pending_transport_action == "pause":
+            self.state.pending_transport_action = None
+            self.state.current_position = player.get_pos()
+            self.state.is_paused = True
+
+        if not player.get_busy() and self.state.pending_transport_action == "stop":
+            self.state.pending_transport_action = None
+            self.clear_playing()
+            player.reset_progress()
+            if self.state.current_song in self.ui.tree.get_children():
+                self.ui.tree.selection_set(self.state.current_song)
+            self.state.is_playing = False
+            self.state.is_paused = False
+            self.state.abort_loudness_scan = False
+            global_vars.wave_canvas.delete("all")
+
+        if not player.get_busy() and self.state.pending_transport_action == "next":
+            self.state.pending_transport_action = None
+            self.state.waiting_time = 0
+            next_song = self.get_next_song(self.state.current_song)
+            if next_song is not None:
+                self.state.current_song = next_song
+                self.sync_eq_genre_with_song(self.state.current_song)
+                self.select_playing(self.state.current_song)
+                player.reset_progress()
+                player.play_from_list(self.state.current_song, self.state.songs)
+                self.state.is_paused = False
+                self.state.is_playing = True
+            else:
+                self.state.is_playing = False
+                self.state.current_song = None
+                self.clear_playing()
+                print("End...")
+
+        if (
+            not (player.get_busy() or self.state.is_paused)
+            and self.state.is_playing
+            and self.state.pending_transport_action is None
+        ):
             self.state.waiting_time += self.dt
             if self.state.waiting_time >= config.pause_time:
                 self.state.waiting_time = 0

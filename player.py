@@ -6,17 +6,15 @@ import tempfile
 import threading
 import time
 import uuid
-import wave
 from io import BytesIO
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import pygame
-import pygame._sdl2.audio as sdl2_audio
 import pyloudnorm as pyln
+import sounddevice as sd
+from pedalboard import LowpassFilter, PeakFilter, Pedalboard
 from PIL import Image
-from scipy.signal import butter, lfilter
 
 import config
 import global_vars
@@ -28,21 +26,38 @@ matplotlib.use("Agg")
 
 tmp_files = []
 
-current_duration = 0
+current_duration = 0.0
 loudnes_correction = 1.0
-
 start_pos = 0
 
 allowed_files = [".mp3", ".ogg", ".aif", ".aiff", ".m4a", ".flac"]
-
 converted_files = {}
 
 current_volume = 0.0
+
+_stream = None
+_selected_device = None
+_samplerate = 44100
+_audio_data = None
+_current_frame = 0
+_is_playing = False
+_is_paused = False
+_fade_frames_remaining = 0
+_fade_total_frames = 0
+_fade_target_action = None
+_intro_frames_remaining = 0
+_intro_total_frames = 0
+_needs_board_reset = False
 _live_playback_context = None
+_current_high_frequency = 20000
+_state_lock = threading.Lock()
+
+_current_board = Pedalboard()
+_current_eq_settings = {"enabled": False, "bands": {}}
 
 
 def is_initialized():
-    return pygame.mixer.get_init() is not None
+    return _stream is not None
 
 
 def delete_tmp_files():
@@ -51,7 +66,6 @@ def delete_tmp_files():
         try:
             if os.path.exists(file):
                 os.remove(file)
-                print("Deleted file:", file)
         except OSError as e:
             print("Cannot delete tmp file:", file, e)
     tmp_files = []
@@ -92,25 +106,64 @@ def can_load_sound(file_path):
         converted_files[new_file] = file_path
         return new_file
     except Exception as e:
-        print("Cannot load: ", file_path, e)
+        print("Cannot load:", file_path, e)
         return None
 
 
+def _ensure_stream():
+    global _stream
+    if _stream is not None:
+        return
+    _stream = sd.OutputStream(
+        samplerate=_samplerate,
+        device=_selected_device,
+        channels=2,
+        callback=_audio_callback,
+        blocksize=2048,
+        dtype="float32",
+        latency="high",
+    )
+    _stream.start()
+
+
+def _restart_stream():
+    global _stream
+    if _stream is not None:
+        _stream.stop()
+        _stream.close()
+        _stream = None
+    _ensure_stream()
+
+
 def quit_device():
-    if is_initialized():
-        pygame.mixer.quit()
+    global _stream
+    stop()
+    if _stream is not None:
+        _stream.stop()
+        _stream.close()
+        _stream = None
 
 
 def set_device(selected_device):
-    if is_initialized():
-        pygame.mixer.quit()
-    pygame.mixer.init(devicename=selected_device)
-    pygame.mixer.music.set_volume(current_volume)
+    global _selected_device, _samplerate
+    _selected_device = selected_device
+    try:
+        device_info = sd.query_devices(_selected_device, "output")
+        _samplerate = int(device_info["default_samplerate"])
+    except Exception:
+        _samplerate = 44100
+    _restart_stream()
     print("Device set:", selected_device)
 
 
 def get_devices(capture_devices: bool = False):
-    return tuple(sdl2_audio.get_audio_device_names(capture_devices))
+    devices = []
+    for device in sd.query_devices():
+        if capture_devices and device["max_input_channels"] > 0:
+            devices.append(device["name"])
+        if not capture_devices and device["max_output_channels"] > 0:
+            devices.append(device["name"])
+    return tuple(devices)
 
 
 def pcm_to_float(pcm_data, bit_depth=16):
@@ -118,40 +171,75 @@ def pcm_to_float(pcm_data, bit_depth=16):
     return pcm_data.astype(np.float32) / max_value
 
 
+def audiosegment_to_float32(audio_segment):
+    sample_width = audio_segment.sample_width
+    channels = audio_segment.channels
+    raw = np.array(audio_segment.get_array_of_samples())
+
+    if channels <= 0:
+        raise ValueError("Decoded audio has no channels")
+
+    raw = raw.reshape((-1, channels))
+
+    if sample_width == 1:
+        scale = float(2 ** 7)
+    elif sample_width == 2:
+        scale = float(2 ** 15)
+    elif sample_width == 3:
+        scale = float(2 ** 23)
+    elif sample_width == 4:
+        scale = float(2 ** 31)
+    else:
+        raise ValueError(f"Unsupported sample width: {sample_width}")
+
+    return raw.astype(np.float32) / scale
+
+
 def get_loudness(data, rate):
     meter = pyln.Meter(rate)
-    return meter.integrated_loudness(pcm_to_float(data))
+    return meter.integrated_loudness(data)
+
+
+def _effective_gain():
+    gain = current_volume * loudnes_correction
+    return min(1.0, max(0.0, gain))
 
 
 def set_volume(volume):
     global current_volume
     current_volume = volume
-    v = volume * get_loudness_corretion()
-    if v > 1:
-        v = 1
-    if is_initialized():
-        pygame.mixer.music.set_volume(v)
 
 
 def pause():
-    if is_initialized():
-        pygame.mixer.music.pause()
+    global _is_paused
+    with _state_lock:
+        _is_paused = True
 
 
 def unpause():
-    if is_initialized():
-        pygame.mixer.unpause()
+    global _is_paused, _intro_total_frames, _intro_frames_remaining
+    with _state_lock:
+        _is_paused = False
+        _intro_total_frames = max(1, int((_samplerate * config.fade_time) / 1000.0))
+        _intro_frames_remaining = _intro_total_frames
 
 
 def init_player():
-    if not is_initialized():
-        pygame.mixer.init()
+    global _samplerate
+    if _selected_device is None:
+        try:
+            default_info = sd.query_devices(None, "output")
+            _samplerate = int(default_info["default_samplerate"])
+        except Exception:
+            _samplerate = 44100
+    _ensure_stream()
 
 
 def reset_progress():
-    global current_duration, start_pos
-    current_duration = 0
+    global current_duration, start_pos, _current_frame
+    current_duration = 0.0
     start_pos = 0
+    _current_frame = 0
 
 
 def get_loudness_corretion():
@@ -165,15 +253,13 @@ def get_loudness_corretion_db():
 
 
 def get_progress():
-    global current_duration, start_pos
     if current_duration > 0:
-        pos = get_pos()
-        return (pos + start_pos) / (current_duration * 1000)
+        return ((get_pos() + get_start_pos()) / (current_duration * 1000))
     return 0
 
 
 def get_pos():
-    return pygame.mixer.music.get_pos()
+    return int((_current_frame / _samplerate) * 1000)
 
 
 def get_start_pos():
@@ -181,78 +267,157 @@ def get_start_pos():
 
 
 def get_duration():
-    return current_duration * 1000
+    return int(current_duration * 1000)
 
 
 def fade():
-    if is_initialized():
-        pygame.mixer.music.fadeout(config.fade_time)
+    global _fade_frames_remaining, _fade_total_frames, _fade_target_action
+    if not _is_playing:
+        return
+    _fade_total_frames = max(1, int((_samplerate * config.fade_time) / 1000.0))
+    _fade_frames_remaining = _fade_total_frames
+    _fade_target_action = "stop"
+
+
+def fade_to(target_action="stop", duration_ms=None):
+    global _fade_frames_remaining, _fade_total_frames, _fade_target_action
+    with _state_lock:
+        if not _is_playing:
+            return
+        fade_ms = config.fade_time if duration_ms is None else duration_ms
+        _fade_total_frames = max(1, int((_samplerate * fade_ms) / 1000.0))
+        _fade_frames_remaining = _fade_total_frames
+        _fade_target_action = target_action
 
 
 def stop():
-    if is_initialized():
-        pygame.mixer.music.stop()
+    global _is_playing, _is_paused, _current_frame
+    global _fade_frames_remaining, _fade_total_frames
+    global _intro_frames_remaining, _intro_total_frames, _needs_board_reset, _fade_target_action
+    with _state_lock:
+        _is_playing = False
+        _is_paused = False
+        _current_frame = 0
+        _fade_frames_remaining = 0
+        _fade_total_frames = 0
+        _fade_target_action = None
+        _intro_frames_remaining = 0
+        _intro_total_frames = 0
+        _needs_board_reset = False
 
 
-def decode_mp3_to_pcm(input_mp3_path):
+def decode_mp3_to_pcm(input_mp3_path, samplerate=44100):
     from pydub import AudioSegment
 
-    return AudioSegment.from_file(input_mp3_path).set_frame_rate(44100).set_channels(2)
+    audio = AudioSegment.from_file(input_mp3_path)
+    if audio.frame_rate != samplerate:
+        audio = audio.set_frame_rate(samplerate)
+    if audio.channels != 2:
+        audio = audio.set_channels(2)
+    return audio
 
 
-def low_pass_filter(data, sample_rate, cutoff_freq):
-    nyquist = 0.5 * sample_rate
-    normal_cutoff = cutoff_freq / nyquist
-    b, a = butter(5, normal_cutoff, btype="low", analog=False)
-    return lfilter(b, a, data)
+def _build_board(sample_rate, eq_settings, high_frequency):
+    filters = [LowpassFilter(cutoff_frequency_hz=min(float(high_frequency), sample_rate / 2 - 200))]
+    if eq_settings and eq_settings.get("enabled", False):
+        bands = eq_settings.get("bands", {})
+        ordered_bands = sorted((float(freq), float(gain)) for freq, gain in bands.items())
+        for index, (center_freq, gain_db) in enumerate(ordered_bands):
+            lower_freq = ordered_bands[index - 1][0] if index > 0 else center_freq / 2
+            upper_freq = ordered_bands[index + 1][0] if index < len(ordered_bands) - 1 else center_freq * 2
+            bandwidth = max(1.0, upper_freq - lower_freq)
+            q = max(0.35, center_freq / bandwidth)
+            filters.append(PeakFilter(cutoff_frequency_hz=center_freq, gain_db=gain_db, q=q))
+    return Pedalboard(filters)
 
 
-def peaking_eq_filter(data, sample_rate, center_freq, gain_db, q=1.0):
-    if abs(gain_db) < 0.01:
-        return data
-
-    nyquist = sample_rate / 2
-    clamped_freq = max(20.0, min(float(center_freq), nyquist - 1))
-    omega = 2 * math.pi * clamped_freq / sample_rate
-    alpha = math.sin(omega) / (2 * q)
-    amplitude = math.pow(10, gain_db / 40.0)
-    cos_omega = math.cos(omega)
-
-    b0 = 1 + alpha * amplitude
-    b1 = -2 * cos_omega
-    b2 = 1 - alpha * amplitude
-    a0 = 1 + alpha / amplitude
-    a1 = -2 * cos_omega
-    a2 = 1 - alpha / amplitude
-
-    b = np.array([b0 / a0, b1 / a0, b2 / a0], dtype=np.float64)
-    a = np.array([1.0, a1 / a0, a2 / a0], dtype=np.float64)
-    return lfilter(b, a, data)
+def _normalize_eq_settings(eq_settings):
+    if not eq_settings:
+        return {"enabled": False, "bands": {}}
+    return {
+        "enabled": bool(eq_settings.get("enabled", False)),
+        "bands": {str(freq): float(gain) for freq, gain in eq_settings.get("bands", {}).items()},
+    }
 
 
-def apply_graphic_equalizer(data, sample_rate, eq_settings):
-    if not eq_settings or not eq_settings.get("enabled", False):
-        return data
+def _apply_processing_change(eq_settings, high_frequency, smooth):
+    global _current_board, _current_high_frequency, _current_eq_settings
 
-    bands = eq_settings.get("bands", {})
-    if not bands:
-        return data
+    normalized_target = _normalize_eq_settings(eq_settings)
+    target_high_frequency = float(high_frequency)
+    _current_board = _build_board(_samplerate, normalized_target, target_high_frequency)
+    _current_eq_settings = normalized_target
+    _current_high_frequency = target_high_frequency
 
-    ordered_bands = sorted((float(freq), float(gain)) for freq, gain in bands.items())
-    equalized = data.astype(np.float64)
 
-    for index, (center_freq, gain_db) in enumerate(ordered_bands):
-        lower_freq = ordered_bands[index - 1][0] if index > 0 else center_freq / 2
-        upper_freq = ordered_bands[index + 1][0] if index < len(ordered_bands) - 1 else center_freq * 2
-        bandwidth = max(1.0, upper_freq - lower_freq)
-        q = max(0.35, center_freq / bandwidth)
-        equalized = peaking_eq_filter(equalized, sample_rate, center_freq, gain_db, q=q)
+def _audio_callback(outdata, frames, time_info, status):
+    global _current_frame, _is_playing, _is_paused
+    global _fade_frames_remaining, _fade_target_action
+    global _intro_frames_remaining, _needs_board_reset
+    global _current_board
 
-    peak = np.max(np.abs(equalized)) if len(equalized) else 0
-    if peak > 32767:
-        equalized = equalized * (32767.0 / peak)
+    outdata.fill(0)
 
-    return np.clip(equalized, -32768, 32767).astype(np.int16)
+    with _state_lock:
+        if not _is_playing or _is_paused or _audio_data is None:
+            return
+
+        remaining_frames = len(_audio_data) - _current_frame
+        chunk_size = min(frames, remaining_frames)
+        if chunk_size <= 0:
+            _is_playing = False
+            return
+
+        chunk = _audio_data[_current_frame:_current_frame + chunk_size]
+        processed = _current_board.process(
+            chunk.T,
+            _samplerate,
+            buffer_size=chunk_size,
+            reset=_needs_board_reset,
+        ).T
+        _needs_board_reset = False
+
+        gain = _effective_gain()
+        if _fade_frames_remaining > 0:
+            fade_count = min(chunk_size, _fade_frames_remaining)
+            fade_start = _fade_frames_remaining / _fade_total_frames
+            fade_end = max(0.0, (_fade_frames_remaining - fade_count) / _fade_total_frames)
+            ramp = np.linspace(fade_start, fade_end, fade_count, dtype=np.float32).reshape(-1, 1)
+            processed[:fade_count] *= ramp * gain
+            if fade_count < chunk_size:
+                processed[fade_count:] = 0
+            _fade_frames_remaining -= fade_count
+            if _fade_frames_remaining <= 0:
+                if _fade_target_action == "pause":
+                    _is_paused = True
+                else:
+                    _is_playing = False
+                _fade_target_action = None
+        else:
+            processed *= gain
+
+        if _intro_frames_remaining > 0:
+            intro_count = min(chunk_size, _intro_frames_remaining)
+            intro_start_done = _intro_total_frames - _intro_frames_remaining
+            intro_end_done = intro_start_done + intro_count
+            intro_start = intro_start_done / _intro_total_frames
+            intro_end = intro_end_done / _intro_total_frames
+            ramp = np.linspace(intro_start, intro_end, intro_count, dtype=np.float32).reshape(-1, 1)
+            processed[:intro_count] *= ramp
+            _intro_frames_remaining -= intro_count
+
+        if _fade_frames_remaining <= 0 and remaining_frames <= chunk_size:
+            outro_count = min(chunk_size, max(1, int(_samplerate * 0.008)))
+            ramp = np.linspace(1.0, 0.0, outro_count, dtype=np.float32).reshape(-1, 1)
+            processed[chunk_size - outro_count:chunk_size] *= ramp
+
+        outdata[:chunk_size] = processed
+        _current_frame += chunk_size
+
+        if chunk_size < frames:
+            _is_playing = False
+        elif _current_frame >= len(_audio_data):
+            _is_playing = False
 
 
 def make_wave(pcm_data, sample_rate):
@@ -291,14 +456,12 @@ def make_wave(pcm_data, sample_rate):
 
 
 def get_loudness_from_file(file):
-    audio_segment = decode_mp3_to_pcm(file)
-    sample_rate = audio_segment.frame_rate
-    pcm_data = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
-    return get_loudness(pcm_data, sample_rate)
+    audio_segment = decode_mp3_to_pcm(file, 44100)
+    return get_loudness(audiosegment_to_float32(audio_segment), 44100)
 
 
 def detect_silence_start_end_from_file(file, min_silence_len, silence_tresh):
-    audio_segment = decode_mp3_to_pcm(file)
+    audio_segment = decode_mp3_to_pcm(file, 44100)
     return utils.detect_silence_start_end(audio_segment, min_silence_len, silence_tresh)
 
 
@@ -313,88 +476,72 @@ def play_from_file(
     files=None,
     update_wave=True,
 ):
-    global tmp_files, current_volume, loudnes_correction, current_duration, start_pos, _live_playback_context
+    global _audio_data, _current_frame, _is_playing, _is_paused
+    global current_duration, start_pos, loudnes_correction, _live_playback_context
+    global _samplerate, _fade_frames_remaining, _fade_total_frames
+    global _intro_frames_remaining, _intro_total_frames, _needs_board_reset
+    global _current_board, _current_eq_settings, _current_high_frequency
 
+    init_player()
     start_time = time.time()
 
-    num_channels = 2
-    sample_width = 2
+    if _selected_device is not None:
+        try:
+            device_info = sd.query_devices(_selected_device, "output")
+            _samplerate = int(device_info["default_samplerate"])
+        except Exception:
+            _samplerate = 44100
 
-    audio_segment = decode_mp3_to_pcm(file)
+    audio_segment = decode_mp3_to_pcm(file, _samplerate)
     data = files[song_id]
     if len(data) > 4:
-        start_cut = data[3]
-        end_cut = data[4]
+        start_cut, end_cut = data[3], data[4]
     else:
         print("Extra cut for file:", file)
         start_cut, end_cut = utils.detect_silence_start_end(audio_segment, 200, -56)
-    print("Cut: ", start_cut, end_cut)
+    print("Cut:", start_cut, end_cut)
 
     audio_segment = audio_segment[start_cut:end_cut]
-
-    sample_rate = audio_segment.frame_rate
     pcm_data = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
+    next_audio_data = audiosegment_to_float32(audio_segment)
 
     if update_wave:
-        thread = threading.Thread(target=lambda: make_wave(pcm_data, sample_rate), daemon=True)
-        thread.start()
-
-    left_channel = pcm_data[0::2]
-    right_channel = pcm_data[1::2]
-
-    filtered_left = low_pass_filter(left_channel, sample_rate, high_frequency)
-    filtered_right = low_pass_filter(right_channel, sample_rate, high_frequency)
-
-    filtered_left = apply_graphic_equalizer(filtered_left, sample_rate, eq_settings)
-    filtered_right = apply_graphic_equalizer(filtered_right, sample_rate, eq_settings)
-
-    filtered_audio = np.empty((filtered_left.size + filtered_right.size,), dtype=np.int16)
-    filtered_audio[0::2] = filtered_left
-    filtered_audio[1::2] = filtered_right
+        threading.Thread(target=lambda: make_wave(pcm_data, _samplerate), daemon=True).start()
 
     if normalize_volume:
         if len(data) > 2:
             loudness = data[2]
         else:
             print("Extra loudness for file:", file)
-            loudness = get_loudness(pcm_data, sample_rate)
-
+            loudness = get_loudness(next_audio_data, _samplerate)
         target_lufs = -20
         difference = target_lufs - loudness
-        scaling_factor = 10 ** (difference / 20.0)
+        next_loudness_correction = 10 ** (difference / 20.0)
+        print("Volume:", current_volume, min(1.0, max(0.0, current_volume * next_loudness_correction)), next_loudness_correction, loudness)
+    else:
+        next_loudness_correction = 1.0
 
-        new_volume = scaling_factor * current_volume
-        if new_volume > 1:
-            new_volume = 1
+    next_board = _build_board(_samplerate, _normalize_eq_settings(eq_settings), high_frequency)
+    next_duration = len(next_audio_data) / _samplerate
+    next_frame = min(len(next_audio_data), max(0, int((pos / 1000.0) * _samplerate)))
+    next_intro_total_frames = max(1, int((_samplerate * config.fade_time) / 1000.0))
 
-        loudnes_correction = scaling_factor
-        print("Volume:", current_volume, new_volume, scaling_factor, loudness)
-        pygame.mixer.music.set_volume(new_volume)
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-        temp_file_path = temp_file.name
-        with wave.open(temp_file, "wb") as output_wav:
-            output_wav.setnchannels(num_channels)
-            output_wav.setsampwidth(sample_width)
-            output_wav.setframerate(sample_rate)
-            trim_audio = filtered_audio.tobytes()
-            output_wav.writeframes(trim_audio)
-
-    audio_length_in_bytes = len(trim_audio)
-    duration_seconds = audio_length_in_bytes / (sample_rate * num_channels * sample_width)
-
-    pygame.mixer.music.load(temp_file_path)
-    end_time = time.time()
-
-    delete_tmp_files()
-    tmp_files.append(temp_file_path)
-
-    current_duration = duration_seconds
-    start_pos = pos
-    pos = pos / 1000
-
-    fade_time = config.fade_time if pos > 0 else 0
-    pygame.mixer.music.play(fade_ms=fade_time, start=pos)
+    with _state_lock:
+        _audio_data = next_audio_data
+        _current_board = next_board
+        _current_eq_settings = _normalize_eq_settings(eq_settings)
+        _current_high_frequency = float(high_frequency)
+        loudnes_correction = next_loudness_correction
+        current_duration = next_duration
+        _current_frame = next_frame
+        start_pos = 0
+        _is_playing = True
+        _is_paused = False
+        _fade_frames_remaining = 0
+        _fade_total_frames = 0
+        _intro_total_frames = next_intro_total_frames
+        _intro_frames_remaining = _intro_total_frames
+        _needs_board_reset = True
 
     _live_playback_context = {
         "file": file,
@@ -406,8 +553,8 @@ def play_from_file(
         "eq_settings": eq_settings,
     }
 
-    print(f"Encoding time: {end_time - start_time:.4f} s")
-    return duration_seconds
+    print(f"Decode and prepare time: {time.time() - start_time:.4f} s")
+    return current_duration
 
 
 def extract_h_value(input_string, default_value=20000):
@@ -418,31 +565,32 @@ def extract_h_value(input_string, default_value=20000):
 
 
 def play_from_list(song_id, songs, pos=0):
-    if song_id is not None:
-        file = songs[song_id][0]
-        tags = songs[song_id][1]
-        genre = tags.get("genre", "")
-        comment = tags.get("comment", "")
+    if song_id is None:
+        return
+    file = songs[song_id][0]
+    tags = songs[song_id][1]
+    genre = tags.get("genre", "")
+    comment = tags.get("comment", "")
 
-        high_frequency = extract_h_value(comment)
-        eq_settings = config.get_genre_equalizer_settings(genre)
-        print("High frequency: ", high_frequency)
-        print("Genre EQ:", genre, eq_settings)
+    high_frequency = extract_h_value(comment)
+    eq_settings = config.get_genre_equalizer_settings(genre)
+    print("High frequency:", high_frequency)
+    print("Genre EQ:", genre, eq_settings)
 
-        try:
-            play_from_file(
-                file,
-                pos=pos,
-                normalize_volume=True,
-                low_frequency=10,
-                high_frequency=high_frequency,
-                eq_settings=eq_settings,
-                song_id=song_id,
-                files=songs,
-            )
-        except Exception as e:
-            print("Error: ", str(e))
-        print("Playing: ", song_id, file)
+    try:
+        play_from_file(
+            file,
+            pos=pos,
+            normalize_volume=True,
+            low_frequency=10,
+            high_frequency=high_frequency,
+            eq_settings=eq_settings,
+            song_id=song_id,
+            files=songs,
+        )
+    except Exception as e:
+        print("Error:", str(e))
+    print("Playing:", song_id, file)
 
 
 def update_live_eq(eq_settings):
@@ -451,25 +599,10 @@ def update_live_eq(eq_settings):
     if not _live_playback_context or not get_busy():
         return
 
-    pos = max(0, get_pos() + get_start_pos())
-    context = dict(_live_playback_context)
-    context["eq_settings"] = eq_settings
-    _live_playback_context = context
-
-    play_from_file(
-        context["file"],
-        pos=pos,
-        normalize_volume=context["normalize_volume"],
-        low_frequency=context["low_frequency"],
-        high_frequency=context["high_frequency"],
-        eq_settings=context["eq_settings"],
-        song_id=context["song_id"],
-        files=context["files"],
-        update_wave=False,
-    )
+    _live_playback_context = dict(_live_playback_context)
+    _live_playback_context["eq_settings"] = eq_settings
+    _apply_processing_change(eq_settings, _live_playback_context["high_frequency"], smooth=True)
 
 
 def get_busy():
-    if not is_initialized():
-        return False
-    return pygame.mixer.music.get_busy()
+    return bool(_is_playing and not _is_paused)

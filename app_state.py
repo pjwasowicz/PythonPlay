@@ -44,3 +44,5 @@ class AppState:
     current_position: int = 0
     waiting_time: int = 0
     is_converting: bool = False
+    abort_loudness_scan: bool = False
+    pending_transport_action: Any = None
