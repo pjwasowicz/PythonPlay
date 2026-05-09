@@ -211,7 +211,7 @@ class MilongaApp:
             return
 
         tags = self.state.songs[self.state.current_song][1]
-        song_genre = tags.get("genre", "default")
+        song_genre = (tags.get("genre", "default") or "default").strip().lower()
         if song_genre != self.current_eq_genre:
             return
 
@@ -231,7 +231,7 @@ class MilongaApp:
     def store_current_eq_preset(self):
         if self.ui is None or self.ui.eq_enabled_var is None or not self.ui.eq_band_vars:
             return
-        genre_name = self.current_eq_genre
+        genre_name = (self.current_eq_genre or "default").strip().lower()
         if genre_name not in self.eq_staged_equalizers:
             return
         self.eq_staged_equalizers[genre_name] = {
@@ -245,6 +245,7 @@ class MilongaApp:
     def load_eq_preset(self, genre_name, schedule_live_update=False):
         if self.ui is None or self.ui.eq_enabled_var is None or not self.ui.eq_band_vars:
             return
+        genre_name = (genre_name or "default").strip().lower()
         self.suppress_live_eq_update = True
         preset = self.eq_staged_equalizers.get(
             genre_name,
@@ -264,7 +265,7 @@ class MilongaApp:
     def on_eq_genre_change(self, selected_genre):
         self.store_current_eq_preset()
         self.persist_eq_settings()
-        self.load_eq_preset(selected_genre, schedule_live_update=True)
+        self.load_eq_preset((selected_genre or "default").strip().lower(), schedule_live_update=True)
 
     def save_eq_settings(self):
         self.store_current_eq_preset()
@@ -303,7 +304,7 @@ class MilongaApp:
         if song_id is None or song_id not in self.state.songs:
             return
 
-        song_genre = self.state.songs[song_id][1].get("genre", "default")
+        song_genre = (self.state.songs[song_id][1].get("genre", "default") or "default").strip().lower()
         if song_genre not in self.eq_staged_equalizers:
             self.eq_staged_equalizers[song_genre] = {
                 "enabled": False,
@@ -314,6 +315,14 @@ class MilongaApp:
             self.load_eq_preset(song_genre, schedule_live_update=False)
         else:
             self.current_eq_genre = song_genre
+
+    def apply_current_song_eq_to_player(self):
+        if self.state.current_song is None or self.state.current_song not in self.state.songs:
+            return
+        song_genre = (self.state.songs[self.state.current_song][1].get("genre", "default") or "default").strip().lower()
+        preset = self.eq_staged_equalizers.get(song_genre)
+        if preset is not None:
+            player.update_live_eq(preset)
 
     def update_eq_panel_visibility(self):
         if self.ui is None or self.ui.eq_body is None or self.ui.eq_toggle_button is None:
@@ -793,8 +802,9 @@ class MilongaApp:
         self.state.abort_loudness_scan = True
         self.sync_eq_genre_with_song(song)
         player.play_from_list(song, self.state.songs)
-        self.select_playing(song)
         self.state.current_song = song
+        self.apply_current_song_eq_to_player()
+        self.select_playing(song)
         self.state.is_playing = True
 
     def on_stop(self):
@@ -1041,6 +1051,7 @@ class MilongaApp:
                 self.select_playing(self.state.current_song)
                 player.reset_progress()
                 player.play_from_list(self.state.current_song, self.state.songs)
+                self.apply_current_song_eq_to_player()
                 self.state.is_paused = False
                 self.state.is_playing = True
             else:
@@ -1064,6 +1075,7 @@ class MilongaApp:
                     self.select_playing(self.state.current_song)
                     player.reset_progress()
                     player.play_from_list(self.state.current_song, self.state.songs)
+                    self.apply_current_song_eq_to_player()
                 else:
                     self.state.is_playing = False
                     self.state.current_song = None

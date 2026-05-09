@@ -558,7 +558,8 @@ def play_from_file(
 
 
 def extract_h_value(input_string, default_value=20000):
-    match = re.search(r"h:(\d+)", input_string.lower())
+    normalized_value = "" if input_string is None else str(input_string)
+    match = re.search(r"h:(\d+)", normalized_value.lower())
     if match:
         return int(match.group(1))
     return default_value
